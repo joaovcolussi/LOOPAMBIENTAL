@@ -43,7 +43,7 @@ comandos `pnpm`, `docker` e `cp`.
 Com Git:
 
 ```bash
-git clone <https://github.com/joaovcolussi/LOOPAMBIENTAL> loopambiental
+git clone https://github.com/joaovcolussi/LOOPAMBIENTAL
 cd loopambiental
 ```
 
