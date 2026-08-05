@@ -1,0 +1,7 @@
+{
+  "name": "@loopambiental/worker",
+  "private": true,
+  "scripts": { "dev": "tsx watch src/main.ts", "build": "tsc", "lint": "prettier --check \"src/**/*.ts\"", "typecheck": "tsc --noEmit", "test": "echo No worker tests yet" },
+  "dependencies": {},
+  "devDependencies": { "tsx": "^4.19.2", "typescript": "^5.7.3" }
+}

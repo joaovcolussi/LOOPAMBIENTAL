@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520">
+  <rect width="900" height="520" fill="#d8ebe1"/>
+  <circle cx="760" cy="100" r="150" fill="#bfe0cf"/>
+  <g fill="#81bfa4" stroke="#39765d" stroke-width="8">
+    <path d="m190 345 25-165 66 8 18 165z"/><path d="m285 360 4-175 66 0 23 175z"/>
+    <path d="m390 350 13-180 65 4 16 176z"/><path d="m490 360 0-170 68 0 20 170z"/>
+    <path d="m600 350 12-160 62 8 15 152z"/>
+  </g>
+  <path d="M215 180h66M405 176h63M612 190h62" stroke="#d8f3e3" stroke-width="12"/>
+  <text x="64" y="70" font-family="Arial" font-size="28" font-weight="700" fill="#24483b">PET CRISTAL</text>
+</svg>

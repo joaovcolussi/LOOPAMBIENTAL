@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520">
+  <rect width="900" height="520" fill="#eee3d2"/>
+  <circle cx="760" cy="100" r="150" fill="#e1d0b5"/>
+  <path d="m205 345 120-145 300 0 105 145z" fill="#a9703e" stroke="#754a2b" stroke-width="10"/>
+  <path d="m255 310 94-75M350 310l94-75M445 310l94-75M540 310l94-75" stroke="#d7a66d" stroke-width="16"/>
+  <path d="M205 345h525" stroke="#633d27" stroke-width="14"/>
+  <text x="64" y="70" font-family="Arial" font-size="28" font-weight="700" fill="#68452b">PALLETS DE MADEIRA</text>
+</svg>

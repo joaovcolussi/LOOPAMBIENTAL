@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520">
+  <rect width="900" height="520" fill="#d9eadb"/>
+  <circle cx="760" cy="90" r="150" fill="#c1dfc7"/>
+  <path d="M120 380 270 150l220 52-36 216z" fill="#a97843"/>
+  <path d="m270 150 184 50 120 210-120 18z" fill="#d09a5d"/>
+  <path d="m120 380 120-36 214 18-74 56z" fill="#8f6137"/>
+  <path d="m250 250 205 48M225 300l205 48" stroke="#e5bc7c" stroke-width="16" opacity=".75"/>
+  <text x="64" y="70" font-family="Arial" font-size="28" font-weight="700" fill="#24483b">PAPELAO ONDULADO</text>
+</svg>

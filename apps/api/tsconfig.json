@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "module": "commonjs", "moduleResolution": "node", "baseUrl": "../..", "paths": { "@loopambiental/database": ["packages/database/src"] }, "declaration": true, "removeComments": true, "emitDecoratorMetadata": true, "experimentalDecorators": true, "outDir": "./dist", "sourceMap": true, "incremental": true, "noEmit": false },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

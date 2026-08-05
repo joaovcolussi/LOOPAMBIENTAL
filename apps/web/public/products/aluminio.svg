@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520">
+  <rect width="900" height="520" fill="#d9e7ed"/>
+  <circle cx="760" cy="110" r="150" fill="#c3dce4"/>
+  <ellipse cx="440" cy="350" rx="265" ry="65" fill="#657c84"/>
+  <path d="M175 350V210c0-36 119-65 265-65s265 29 265 65v140" fill="#9db6bc"/>
+  <ellipse cx="440" cy="210" rx="265" ry="65" fill="#d9e5e7" stroke="#587178" stroke-width="10"/>
+  <ellipse cx="440" cy="210" rx="185" ry="39" fill="#6d858c"/>
+  <path d="M240 180h400M260 230h360M290 280h300" stroke="#eaf1f0" stroke-width="12" opacity=".7"/>
+  <text x="64" y="70" font-family="Arial" font-size="28" font-weight="700" fill="#294b54">ALUMINIO PRENSADO</text>
+</svg>

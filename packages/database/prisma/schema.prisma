@@ -1,0 +1,601 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING
+  BLOCKED
+  DELETED
+
+  @@map("user_status")
+}
+
+enum PlatformRole {
+  USER
+  MODERATOR
+  ADMIN
+
+  @@map("platform_role")
+}
+
+enum ModerationCaseStatus {
+  OPEN
+  IN_REVIEW
+  APPROVED
+  REJECTED
+
+  @@map("moderation_case_status")
+}
+
+enum ModerationActionType {
+  APPROVE
+  REJECT
+
+  @@map("moderation_action_type")
+}
+
+enum ProposalStatus {
+  PENDING
+  COUNTERED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  EXPIRED
+
+  @@map("proposal_status")
+}
+
+enum DealStatus {
+  OPEN
+  AWAITING_DOCUMENTS
+  AWAITING_PAYMENT
+  AWAITING_PICKUP
+  IN_TRANSIT
+  DELIVERED
+  COMPLETED
+  DISPUTED
+  CANCELLED
+
+  @@map("deal_status")
+}
+
+enum NotificationType {
+  PROPOSAL_CREATED
+  PROPOSAL_COUNTERED
+  PROPOSAL_ACCEPTED
+  PROPOSAL_REJECTED
+  PROPOSAL_CANCELLED
+  MESSAGE_RECEIVED
+  SYSTEM
+
+  @@map("notification_type")
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+
+  @@map("auth_token_type")
+}
+
+enum CompanyStatus {
+  ACTIVE
+  PENDING
+  BLOCKED
+
+  @@map("company_status")
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+
+  @@map("verification_status")
+}
+
+enum CompanyMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+
+  @@map("company_member_role")
+}
+
+enum ListingType {
+  BUY
+  SELL
+
+  @@map("listing_type")
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  PAUSED
+  NEGOTIATING
+  CLOSED
+  EXPIRED
+  REJECTED
+  ARCHIVED
+
+  @@map("listing_status")
+}
+
+enum ListingFrequency {
+  ONE_TIME
+  WEEKLY
+  MONTHLY
+  CONTINUOUS
+
+  @@map("listing_frequency")
+}
+
+enum RiskClassification {
+  NON_HAZARDOUS
+  HAZARDOUS
+  UNKNOWN
+
+  @@map("risk_classification")
+}
+
+enum ContactVisibility {
+  PRIVATE
+  MEMBERS
+  PUBLIC
+
+  @@map("contact_visibility")
+}
+
+enum PaymentStatus {
+  INITIATED
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+
+  @@map("payment_status")
+}
+
+enum LogisticsRequestStatus {
+  REQUESTED
+  QUOTED
+  ACCEPTED
+  IN_TRANSIT
+  COMPLETED
+  CANCELLED
+
+  @@map("logistics_request_status")
+}
+
+enum LogisticsQuoteStatus {
+  ACTIVE
+  ACCEPTED
+  REJECTED
+  EXPIRED
+
+  @@map("logistics_quote_status")
+}
+
+model User {
+  id                       String                    @id @default(uuid()) @db.VarChar(36)
+  name                     String                    @db.VarChar(150)
+  email                    String                    @unique @db.VarChar(320)
+  passwordHash             String?                   @map("password_hash")
+  status                   UserStatus                @default(PENDING)
+  platformRole             PlatformRole              @default(USER) @map("platform_role")
+  emailVerifiedAt          DateTime?                 @map("email_verified_at") @db.DateTime(3)
+  createdAt                DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt                DateTime?                 @map("deleted_at") @db.DateTime(3)
+  memberships              CompanyMember[]
+  listings                 Listing[]                 @relation("listing_creator")
+  sessions                 Session[]
+  moderationActions        ModerationAction[]
+  favorites                Favorite[]
+  proposals                Proposal[]
+  proposalRevisions        ProposalRevision[]
+  conversationParticipants ConversationParticipant[]
+  messages                 Message[]
+  notifications            Notification[]
+  authTokens               AuthToken[]
+  logisticsRequests        LogisticsRequest[]
+  logisticsQuotes          LogisticsQuote[]
+
+  @@index([status])
+  @@index([platformRole])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  userId    String   @map("user_id") @db.VarChar(36)
+  tokenHash String   @unique @map("token_hash") @db.VarChar(128)
+  userAgent String?  @map("user_agent") @db.VarChar(500)
+  ipAddress String?  @map("ip_address") @db.VarChar(64)
+  expiresAt DateTime @map("expires_at") @db.DateTime(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("sessions")
+}
+
+model Company {
+  id                  String               @id @default(uuid()) @db.VarChar(36)
+  legalName           String               @map("legal_name") @db.VarChar(200)
+  tradeName           String?              @map("trade_name") @db.VarChar(200)
+  taxIdHash           String?              @unique @map("tax_id_hash") @db.VarChar(128)
+  status              CompanyStatus        @default(PENDING)
+  verification        VerificationStatus   @default(UNVERIFIED)
+  description         String?              @db.Text
+  city                String?              @db.VarChar(120)
+  state               String?              @db.Char(2)
+  contactName         String?              @map("contact_name") @db.VarChar(150)
+  contactEmail        String?              @map("contact_email") @db.VarChar(320)
+  contactWhatsapp     String?              @map("contact_whatsapp") @db.VarChar(20)
+  taxIdEncrypted      String?              @map("tax_id_encrypted") @db.Text
+  addressLine         String?              @map("address_line") @db.VarChar(200)
+  addressNumber       String?              @map("address_number") @db.VarChar(20)
+  addressDistrict     String?              @map("address_district") @db.VarChar(120)
+  addressPostalCode   String?              @map("address_postal_code") @db.VarChar(12)
+  contactVisibility   ContactVisibility    @default(PRIVATE) @map("contact_visibility")
+  createdAt           DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt           DateTime?            @map("deleted_at") @db.DateTime(3)
+  members             CompanyMember[]
+  listings            Listing[]
+  proposalsMade       Proposal[]           @relation("proposer_company")
+  dealsAsBuyer        Deal[]               @relation("buyer_company")
+  dealsAsSeller       Deal[]               @relation("seller_company")
+  paymentTransactions PaymentTransaction[]
+
+  @@index([status, verification])
+  @@map("companies")
+}
+
+model CompanyMember {
+  companyId String            @map("company_id") @db.VarChar(36)
+  userId    String            @map("user_id") @db.VarChar(36)
+  role      CompanyMemberRole @default(MEMBER)
+  joinedAt  DateTime          @default(now()) @map("joined_at") @db.DateTime(3)
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([companyId, userId])
+  @@index([userId])
+  @@map("company_members")
+}
+
+model WasteCategory {
+  id        String          @id @default(uuid()) @db.VarChar(36)
+  name      String          @db.VarChar(120)
+  slug      String          @unique @db.VarChar(140)
+  parentId  String?         @map("parent_id") @db.VarChar(36)
+  parent    WasteCategory?  @relation("category_tree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  WasteCategory[] @relation("category_tree")
+  materials Material[]
+  listings  Listing[]
+  createdAt DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@index([parentId])
+  @@map("waste_categories")
+}
+
+model Material {
+  id          String        @id @default(uuid()) @db.VarChar(36)
+  categoryId  String        @map("category_id") @db.VarChar(36)
+  name        String        @db.VarChar(160)
+  slug        String        @unique @db.VarChar(180)
+  defaultUnit String        @map("default_unit") @db.VarChar(20)
+  riskClass   String?       @map("risk_class") @db.VarChar(40)
+  category    WasteCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  listings    Listing[]
+  createdAt   DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@index([categoryId])
+  @@map("materials")
+}
+
+model Listing {
+  id                 String             @id @default(uuid()) @db.VarChar(36)
+  companyId          String             @map("company_id") @db.VarChar(36)
+  createdByUserId    String             @map("created_by_user_id") @db.VarChar(36)
+  categoryId         String             @map("category_id") @db.VarChar(36)
+  materialId         String?            @map("material_id") @db.VarChar(36)
+  type               ListingType
+  status             ListingStatus      @default(DRAFT)
+  title              String             @db.VarChar(180)
+  slug               String             @unique @db.VarChar(220)
+  description        String?            @db.Text
+  quantity           Decimal            @db.Decimal(16, 3)
+  availableQuantity  Decimal            @map("available_quantity") @db.Decimal(16, 3)
+  unit               String             @db.VarChar(20)
+  unitPrice          Decimal?           @map("unit_price") @db.Decimal(14, 2)
+  currency           String             @default("BRL") @db.Char(3)
+  frequency          ListingFrequency   @default(ONE_TIME)
+  riskClassification RiskClassification @default(UNKNOWN) @map("risk_classification")
+  originDetails      String?            @map("origin_details") @db.VarChar(240)
+  ownTransport       Boolean            @default(false) @map("own_transport")
+  requiresDocuments  Boolean            @default(false) @map("requires_documents")
+  city               String?            @db.VarChar(120)
+  state              String?            @db.Char(2)
+  publishedAt        DateTime?          @map("published_at") @db.DateTime(3)
+  expiresAt          DateTime?          @map("expires_at") @db.DateTime(3)
+  viewCount          Int                @default(0) @map("view_count")
+  favoriteCount      Int                @default(0) @map("favorite_count")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+  lastAccessAt       DateTime?          @map("last_access_at") @db.DateTime(3)
+  deletedAt          DateTime?          @map("deleted_at") @db.DateTime(3)
+  company            Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  createdBy          User               @relation("listing_creator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  category           WasteCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  material           Material?          @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  moderationCases    ModerationCase[]
+  favorites          Favorite[]
+  proposals          Proposal[]
+  deals              Deal[]
+  conversations      Conversation[]     @relation("listing_conversations")
+
+  @@index([status, type, publishedAt(sort: Desc)])
+  @@index([categoryId, status])
+  @@index([companyId, status])
+  @@index([city, state, status])
+  @@map("listings")
+}
+
+model ModerationCase {
+  id         String               @id @default(uuid()) @db.VarChar(36)
+  listingId  String               @map("listing_id") @db.VarChar(36)
+  status     ModerationCaseStatus @default(OPEN)
+  reason     String?              @db.Text
+  reviewedAt DateTime?            @map("reviewed_at") @db.DateTime(3)
+  createdAt  DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt  DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  listing    Listing              @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  actions    ModerationAction[]
+
+  @@index([status, createdAt])
+  @@index([listingId, status])
+  @@map("moderation_cases")
+}
+
+model ModerationAction {
+  id        String               @id @default(uuid()) @db.VarChar(36)
+  caseId    String               @map("case_id") @db.VarChar(36)
+  actorId   String               @map("actor_id") @db.VarChar(36)
+  type      ModerationActionType
+  reason    String?              @db.Text
+  createdAt DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  case      ModerationCase       @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  actor     User                 @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([caseId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("moderation_actions")
+}
+
+model Favorite {
+  userId    String   @map("user_id") @db.VarChar(36)
+  listingId String   @map("listing_id") @db.VarChar(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([userId, listingId])
+  @@index([listingId, createdAt])
+  @@map("favorites")
+}
+
+model Proposal {
+  id                String             @id @default(uuid()) @db.VarChar(36)
+  listingId         String             @map("listing_id") @db.VarChar(36)
+  proposerCompanyId String             @map("proposer_company_id") @db.VarChar(36)
+  createdByUserId   String             @map("created_by_user_id") @db.VarChar(36)
+  quantity          Decimal            @db.Decimal(16, 3)
+  unitPrice         Decimal            @map("unit_price") @db.Decimal(14, 2)
+  currency          String             @default("BRL") @db.Char(3)
+  notes             String?            @db.Text
+  validUntil        DateTime?          @map("valid_until") @db.DateTime(3)
+  status            ProposalStatus     @default(PENDING)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+  listing           Listing            @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  proposerCompany   Company            @relation("proposer_company", fields: [proposerCompanyId], references: [id], onDelete: Restrict)
+  createdBy         User               @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  revisions         ProposalRevision[]
+  deal              Deal?
+  conversations     Conversation[]     @relation("proposal_conversations")
+
+  @@index([listingId, status])
+  @@index([proposerCompanyId, status])
+  @@map("proposals")
+}
+
+model ProposalRevision {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  proposalId  String   @map("proposal_id") @db.VarChar(36)
+  actorUserId String   @map("actor_user_id") @db.VarChar(36)
+  quantity    Decimal  @db.Decimal(16, 3)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(14, 2)
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  actor       User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([proposalId, createdAt])
+  @@map("proposal_revisions")
+}
+
+model Deal {
+  id                  String               @id @default(uuid()) @db.VarChar(36)
+  listingId           String               @map("listing_id") @db.VarChar(36)
+  proposalId          String               @unique @map("proposal_id") @db.VarChar(36)
+  buyerCompanyId      String               @map("buyer_company_id") @db.VarChar(36)
+  sellerCompanyId     String               @map("seller_company_id") @db.VarChar(36)
+  status              DealStatus           @default(OPEN)
+  createdAt           DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  listing             Listing              @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  proposal            Proposal             @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  buyerCompany        Company              @relation("buyer_company", fields: [buyerCompanyId], references: [id], onDelete: Restrict)
+  sellerCompany       Company              @relation("seller_company", fields: [sellerCompanyId], references: [id], onDelete: Restrict)
+  conversation        Conversation?
+  paymentTransactions PaymentTransaction[]
+  logisticsRequests   LogisticsRequest[]
+
+  @@index([listingId, status])
+  @@index([buyerCompanyId, status])
+  @@index([sellerCompanyId, status])
+  @@map("deals")
+}
+
+model PaymentTransaction {
+  idempotencyKey String        @unique @map("idempotency_key") @db.VarChar(100)
+  id             String        @id @default(uuid()) @db.VarChar(36)
+  dealId         String        @map("deal_id") @db.VarChar(36)
+  companyId      String        @map("company_id") @db.VarChar(36)
+  provider       String        @db.VarChar(40)
+  externalId     String?       @unique @map("external_id") @db.VarChar(180)
+  amount         Decimal       @db.Decimal(14, 2)
+  currency       String        @default("BRL") @db.Char(3)
+  status         PaymentStatus @default(INITIATED)
+  checkoutUrl    String?       @map("checkout_url") @db.Text
+  metadata       Json?
+  paidAt         DateTime?     @map("paid_at") @db.DateTime(3)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
+  deal           Deal          @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([dealId, status])
+  @@index([companyId, createdAt])
+  @@map("payment_transactions")
+}
+
+model LogisticsRequest {
+  id                String                 @id @default(uuid()) @db.VarChar(36)
+  dealId            String                 @map("deal_id") @db.VarChar(36)
+  requestedByUserId String                 @map("requested_by_user_id") @db.VarChar(36)
+  origin            String                 @db.VarChar(300)
+  destination       String                 @db.VarChar(300)
+  quantity          Decimal                @db.Decimal(16, 3)
+  unit              String                 @db.VarChar(20)
+  pickupWindow      String?                @map("pickup_window") @db.VarChar(160)
+  requirements      String?                @db.Text
+  status            LogisticsRequestStatus @default(REQUESTED)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+  deal              Deal                   @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  requestedBy       User                   @relation(fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  quotes            LogisticsQuote[]
+
+  @@index([dealId, status])
+  @@index([requestedByUserId, createdAt])
+  @@map("logistics_requests")
+}
+
+model LogisticsQuote {
+  id             String               @id @default(uuid()) @db.VarChar(36)
+  requestId      String               @map("request_id") @db.VarChar(36)
+  quotedByUserId String               @map("quoted_by_user_id") @db.VarChar(36)
+  carrierName    String               @map("carrier_name") @db.VarChar(200)
+  amount         Decimal              @db.Decimal(14, 2)
+  currency       String               @default("BRL") @db.Char(3)
+  estimatedDays  Int?                 @map("estimated_days")
+  notes          String?              @db.Text
+  status         LogisticsQuoteStatus @default(ACTIVE)
+  createdAt      DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  request        LogisticsRequest     @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  quotedBy       User                 @relation(fields: [quotedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([requestId, status])
+  @@map("logistics_quotes")
+}
+
+model Conversation {
+  id           String                    @id @default(uuid()) @db.VarChar(36)
+  listingId    String?                   @map("listing_id") @db.VarChar(36)
+  proposalId   String?                   @unique @map("proposal_id") @db.VarChar(36)
+  dealId       String?                   @unique @map("deal_id") @db.VarChar(36)
+  createdAt    DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
+  listing      Listing?                  @relation("listing_conversations", fields: [listingId], references: [id], onDelete: Restrict)
+  proposal     Proposal?                 @relation("proposal_conversations", fields: [proposalId], references: [id], onDelete: Restrict)
+  deal         Deal?                     @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([listingId, updatedAt])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversationId String       @map("conversation_id") @db.VarChar(36)
+  userId         String       @map("user_id") @db.VarChar(36)
+  joinedAt       DateTime     @default(now()) @map("joined_at") @db.DateTime(3)
+  lastReadAt     DateTime?    @map("last_read_at") @db.DateTime(3)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId, lastReadAt])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String       @id @default(uuid()) @db.VarChar(36)
+  conversationId String       @map("conversation_id") @db.VarChar(36)
+  senderUserId   String       @map("sender_user_id") @db.VarChar(36)
+  body           String       @db.Text
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
+  editedAt       DateTime?    @map("edited_at") @db.DateTime(3)
+  deletedAt      DateTime?    @map("deleted_at") @db.DateTime(3)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.VarChar(36)
+  userId    String           @map("user_id") @db.VarChar(36)
+  type      NotificationType
+  title     String           @db.VarChar(160)
+  body      String           @db.Text
+  payload   Json?
+  readAt    DateTime?        @map("read_at") @db.DateTime(3)
+  createdAt DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model AuthToken {
+  id        String        @id @default(uuid()) @db.VarChar(36)
+  userId    String        @map("user_id") @db.VarChar(36)
+  type      AuthTokenType
+  tokenHash String        @unique @map("token_hash") @db.VarChar(128)
+  expiresAt DateTime      @map("expires_at") @db.DateTime(3)
+  usedAt    DateTime?     @map("used_at") @db.DateTime(3)
+  createdAt DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, expiresAt])
+  @@map("auth_tokens")
+}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520">
+  <rect width="900" height="520" fill="#d8e8e8"/>
+  <circle cx="760" cy="100" r="150" fill="#bfdada"/>
+  <g fill="#79aaa7" stroke="#376d6c" stroke-width="8">
+    <path d="M210 350V180h76v170z"/><path d="M320 350V140h76v210z"/><path d="M430 350V200h76v150z"/><path d="M540 350V155h76v195z"/>
+  </g>
+  <path d="M230 190h36M340 150h36M450 210h36M560 165h36" stroke="#dff4f1" stroke-width="12"/>
+  <text x="64" y="70" font-family="Arial" font-size="28" font-weight="700" fill="#2d5b5a">VIDRO DE EMBALAGEM</text>
+</svg>

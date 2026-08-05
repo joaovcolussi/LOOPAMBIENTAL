@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520">
+  <rect width="900" height="520" fill="#eadfd5"/>
+  <circle cx="760" cy="100" r="150" fill="#e2cbb9"/>
+  <path d="M170 350c80-170 160-170 240 0s160 170 320 0" fill="none" stroke="#ad5e38" stroke-width="55" stroke-linecap="round"/>
+  <path d="M170 350c80-170 160-170 240 0s160 170 320 0" fill="none" stroke="#e2a477" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="170" cy="350" r="30" fill="#f0bf98" stroke="#8e4b2d" stroke-width="9"/>
+  <text x="64" y="70" font-family="Arial" font-size="28" font-weight="700" fill="#6b3927">CABOS DE COBRE</text>
+</svg>
