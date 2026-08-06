@@ -1,4 +1,9 @@
-import { Controller, Get, Module } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Module,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from './infrastructure/prisma.service';
 import { ListingsController } from './modules/listings/listings.controller';
 import { AuthController } from './modules/auth/auth.controller';
@@ -33,13 +38,21 @@ import { LogisticsService } from './modules/logistics/logistics.service';
 
 @Controller('health')
 class HealthController {
+  constructor(private readonly prisma: PrismaService) {}
+
   @Get()
-  check() {
-    return {
-      status: 'ok',
-      service: 'api',
-      timestamp: new Date().toISOString(),
-    };
+  async check() {
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+      return {
+        status: 'ok',
+        service: 'api',
+        database: 'ok',
+        timestamp: new Date().toISOString(),
+      };
+    } catch {
+      throw new ServiceUnavailableException('DATABASE_UNAVAILABLE');
+    }
   }
 }
 

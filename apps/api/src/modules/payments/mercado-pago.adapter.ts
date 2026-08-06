@@ -48,6 +48,7 @@ export class MercadoPagoAdapter {
         },
         auto_return: 'approved',
       }),
+      signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error('PAYMENT_PROVIDER_ERROR');
     const data = (await response.json()) as {
@@ -69,6 +70,7 @@ export class MercadoPagoAdapter {
       `${this.apiUrl}/v1/payments/${encodeURIComponent(id)}`,
       {
         headers: { Authorization: `Bearer ${this.accessToken}` },
+        signal: AbortSignal.timeout(10_000),
       },
     );
     if (!response.ok) throw new Error('PAYMENT_PROVIDER_ERROR');

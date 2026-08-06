@@ -3,7 +3,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { MercadoPagoAdapter } from './mercado-pago.adapter';
 
@@ -20,8 +22,11 @@ export class PaymentsService {
   ): Promise<unknown> {
     if (!idempotencyKey || idempotencyKey.length > 100)
       throw new BadRequestException('INVALID_IDEMPOTENCY_KEY');
-    const existing = await this.prisma.paymentTransaction.findUnique({
-      where: { idempotencyKey },
+    const existing = await this.prisma.paymentTransaction.findFirst({
+      where: {
+        idempotencyKey,
+        company: { members: { some: { userId } } },
+      },
     });
     if (existing) return existing;
     const deal = await this.prisma.deal.findUnique({
@@ -43,19 +48,36 @@ export class PaymentsService {
     if (!membership) throw new ForbiddenException('DEAL_ACCESS_DENIED');
     if (deal.status === 'CANCELLED')
       throw new BadRequestException('DEAL_NOT_PAYABLE');
-    const amount = (
-      Number(deal.proposal.quantity) * Number(deal.proposal.unitPrice)
-    ).toFixed(2);
-    const transaction = await this.prisma.paymentTransaction.create({
-      data: {
-        idempotencyKey,
-        dealId,
-        companyId: deal.buyerCompanyId,
-        provider: 'MERCADO_PAGO',
-        amount,
-        status: 'INITIATED',
-      },
-    });
+    const amount = new Prisma.Decimal(deal.proposal.quantity)
+      .mul(new Prisma.Decimal(deal.proposal.unitPrice))
+      .toFixed(2);
+    let transaction: { id: string };
+    try {
+      transaction = await this.prisma.paymentTransaction.create({
+        data: {
+          idempotencyKey,
+          dealId,
+          companyId: deal.buyerCompanyId,
+          provider: 'MERCADO_PAGO',
+          amount,
+          status: 'INITIATED',
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const concurrent = await this.prisma.paymentTransaction.findFirst({
+          where: {
+            idempotencyKey,
+            company: { members: { some: { userId } } },
+          },
+        });
+        if (concurrent) return concurrent;
+      }
+      throw error;
+    }
     try {
       const checkout = await this.mercadoPago.createCheckout({
         transactionId: transaction.id,
@@ -76,17 +98,23 @@ export class PaymentsService {
       });
       return payment;
     } catch (error) {
-      await this.prisma.paymentTransaction.update({
-        where: { id: transaction.id },
-        data: {
-          status: 'FAILED',
-          metadata: {
-            error:
-              error instanceof Error ? error.message : 'PAYMENT_PROVIDER_ERROR',
+      try {
+        await this.prisma.paymentTransaction.update({
+          where: { id: transaction.id },
+          data: {
+            status: 'FAILED',
+            metadata: {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'PAYMENT_PROVIDER_ERROR',
+            },
           },
-        },
-      });
-      throw error;
+        });
+      } catch {
+        // Preserve the provider error if the database is unavailable as well.
+      }
+      throw new ServiceUnavailableException('PAYMENT_PROVIDER_UNAVAILABLE');
     }
   }
 

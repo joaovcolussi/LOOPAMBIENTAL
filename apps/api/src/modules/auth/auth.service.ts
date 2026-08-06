@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   Optional,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -22,6 +23,8 @@ type SessionContext = { userAgent?: string; ipAddress?: string };
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly emailService?: EmailService,
@@ -62,10 +65,16 @@ export class AuthService {
         user.id,
         'EMAIL_VERIFICATION',
       );
-      await this.emailService?.sendEmailVerification(
-        user.email,
-        verificationToken,
-      );
+      try {
+        await this.emailService?.sendEmailVerification(
+          user.email,
+          verificationToken,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Verification email failed for ${user.email}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     return { user, token };
   }
@@ -100,7 +109,13 @@ export class AuthService {
     });
     if (user && this.prisma.authToken) {
       const token = await this.createAuthToken(user.id, 'PASSWORD_RESET');
-      await this.emailService?.sendPasswordReset(user.email, token);
+      try {
+        await this.emailService?.sendPasswordReset(user.email, token);
+      } catch (error) {
+        this.logger.warn(
+          `Password reset email failed for ${user.email}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     return { requested: true };
   }
@@ -180,12 +195,13 @@ export class AuthService {
 
     // Sessions use a sliding idle timeout: every authenticated request grants
     // another 20 minutes, while an idle browser session expires naturally.
-    await this.prisma.session.update({
-      where: { id: session.id },
+    const refreshed = await this.prisma.session.updateMany({
+      where: { id: session.id, tokenHash: this.hashToken(token) },
       data: {
         expiresAt: new Date(Date.now() + SESSION_IDLE_SECONDS * 1000),
       },
     });
+    if (refreshed.count === 0) return null;
     return session.user;
   }
 

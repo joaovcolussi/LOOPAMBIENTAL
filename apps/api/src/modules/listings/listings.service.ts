@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../infrastructure/prisma.service';
 
 export type ListingInput = {
@@ -138,13 +139,13 @@ export class ListingsService {
         materialId: input.materialId,
         type: input.type,
         title: input.title,
-        slug: `${this.slugify(input.title)}-${Date.now().toString(36)}`,
+        slug: `${this.slugify(input.title)}-${randomUUID().slice(0, 8)}`,
         description: input.description,
         quantity,
         availableQuantity: quantity,
         unit: input.unit,
         unitPrice: input.unitPrice
-          ? this.parsePositiveDecimal(input.unitPrice, 'INVALID_PRICE')
+          ? this.parsePositiveDecimal(input.unitPrice, 'INVALID_PRICE', 2, 12)
           : undefined,
         frequency: input.frequency,
         riskClassification: input.riskClassification,
@@ -171,6 +172,14 @@ export class ListingsService {
     );
     if (listing.status === 'CLOSED' || listing.status === 'ARCHIVED')
       throw new BadRequestException('LISTING_NOT_EDITABLE');
+    if (input.categoryId || input.materialId !== undefined) {
+      await this.assertCatalog(
+        input.categoryId ?? listing.categoryId,
+        input.materialId === undefined
+          ? (listing.materialId ?? undefined)
+          : input.materialId,
+      );
+    }
     const quantity = input.quantity
       ? this.parsePositiveDecimal(input.quantity, 'INVALID_QUANTITY')
       : undefined;
@@ -185,7 +194,7 @@ export class ListingsService {
         ...(input.title
           ? {
               title: input.title,
-              slug: `${this.slugify(input.title)}-${Date.now().toString(36)}`,
+              slug: `${this.slugify(input.title)}-${randomUUID().slice(0, 8)}`,
             }
           : {}),
         ...(input.description !== undefined
@@ -196,7 +205,12 @@ export class ListingsService {
         ...(input.unitPrice !== undefined
           ? {
               unitPrice: input.unitPrice
-                ? this.parsePositiveDecimal(input.unitPrice, 'INVALID_PRICE')
+                ? this.parsePositiveDecimal(
+                    input.unitPrice,
+                    'INVALID_PRICE',
+                    2,
+                    12,
+                  )
                 : null,
             }
           : {}),
@@ -320,8 +334,20 @@ export class ListingsService {
     )
       throw new BadRequestException('MATERIAL_NOT_FOUND');
   }
-  private parsePositiveDecimal(value: string, code: string) {
-    if (!/^\d+(\.\d{1,3})?$/.test(value) || Number(value) <= 0)
+  private parsePositiveDecimal(
+    value: string,
+    code: string,
+    scale = 3,
+    maxIntegerDigits = 13,
+  ) {
+    const pattern = new RegExp(
+      `^\\d{1,${maxIntegerDigits}}(\\.\\d{1,${scale}})?$`,
+    );
+    if (
+      !pattern.test(value) ||
+      !Number.isFinite(Number(value)) ||
+      Number(value) <= 0
+    )
       throw new BadRequestException(code);
     return value;
   }

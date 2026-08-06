@@ -72,6 +72,7 @@ export class ProposalsService {
       throw new BadRequestException('SAME_COMPANY_PROPOSAL');
     const quantity = this.decimal(input.quantity, 'INVALID_QUANTITY');
     const unitPrice = this.decimal(input.unitPrice, 'INVALID_PRICE');
+    const validUntil = this.parseDate(input.validUntil);
     const proposal = await this.prisma.proposal.create({
       data: {
         listingId: input.listingId,
@@ -80,7 +81,7 @@ export class ProposalsService {
         quantity,
         unitPrice,
         notes: input.notes,
-        validUntil: input.validUntil ? new Date(input.validUntil) : undefined,
+        validUntil,
       },
       select: proposalSelect,
     });
@@ -180,10 +181,11 @@ export class ProposalsService {
         ? proposal.listing.companyId
         : proposal.proposerCompanyId;
     const deal = await this.prisma.$transaction(async (transaction) => {
-      await transaction.proposal.update({
-        where: { id },
+      const changed = await transaction.proposal.updateMany({
+        where: { id, status: { in: ['PENDING', 'COUNTERED'] } },
         data: { status: 'ACCEPTED' },
       });
+      if (changed.count === 0) return null;
       await transaction.listing.update({
         where: { id: proposal.listingId },
         data: { status: 'NEGOTIATING' },
@@ -204,6 +206,14 @@ export class ProposalsService {
         },
       });
     });
+    if (!deal) {
+      const concurrentDeal = await this.prisma.deal.findUnique({
+        where: { proposalId: id },
+        select: { id: true, status: true },
+      });
+      if (concurrentDeal) return concurrentDeal;
+      throw new BadRequestException('INVALID_PROPOSAL_TRANSITION');
+    }
     await this.notifications.create(proposal.createdByUserId, {
       type: 'PROPOSAL_ACCEPTED',
       title: 'Proposta aceita',
@@ -295,8 +305,25 @@ export class ProposalsService {
       throw new ForbiddenException('PROPOSAL_ACCESS_DENIED');
   }
   private decimal(value: string, code: string) {
-    if (!/^\d+(\.\d{1,3})?$/.test(value) || Number(value) <= 0)
+    const scale = code === 'INVALID_PRICE' ? 2 : 3;
+    const maxIntegerDigits = code === 'INVALID_PRICE' ? 12 : 13;
+    const pattern = new RegExp(
+      `^\\d{1,${maxIntegerDigits}}(\\.\\d{1,${scale}})?$`,
+    );
+    if (
+      !pattern.test(value) ||
+      !Number.isFinite(Number(value)) ||
+      Number(value) <= 0
+    )
       throw new BadRequestException(code);
     return value;
+  }
+
+  private parseDate(value?: string) {
+    if (!value) return undefined;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime()))
+      throw new BadRequestException('INVALID_VALID_UNTIL');
+    return date;
   }
 }

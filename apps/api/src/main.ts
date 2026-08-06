@@ -1,8 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { PrismaExceptionFilter } from './common/prisma-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.useGlobalFilters(new PrismaExceptionFilter());
   app.setGlobalPrefix('api/v1');
   const configuredOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
   const allowedOrigins = new Set([
