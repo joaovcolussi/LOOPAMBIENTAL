@@ -4,6 +4,7 @@ import {
   Building2,
   MessageCircle,
   PackageSearch,
+  Settings,
 } from 'lucide-react';
 import { SessionActions } from '../../components/session-actions';
 
@@ -41,8 +42,13 @@ export default function HowItWorksPage() {
     <main>
       <nav className="nav shell">
         <a className="brand" href="/">
-          LOOP <span>AMBIENTAL</span>
+          <Settings size={22} /> LOOP <span>AMBIENTAL</span>
         </a>
+        <div className="nav-links">
+          <a href="/como-funciona">Como funciona</a>
+          <a href="/anuncios">Anúncios</a>
+          <a href="/empresas">Para empresas</a>
+        </div>
         <div className="nav-actions">
           <SessionActions />
         </div>

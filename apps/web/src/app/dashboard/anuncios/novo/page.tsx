@@ -29,6 +29,8 @@ export default function NewListingPage() {
   const [originDetails, setOriginDetails] = useState('');
   const [ownTransport, setOwnTransport] = useState(false);
   const [requiresDocuments, setRequiresDocuments] = useState(false);
+  const [hasLaudos, setHasLaudos] = useState(false);
+  const [laudos, setLaudos] = useState<string[]>([]);
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [error, setError] = useState('');
@@ -61,28 +63,36 @@ export default function NewListingPage() {
     setError('');
     setSaving(true);
     try {
-      await api.createListing({
+      const laudosList = hasLaudos ? laudos.filter(Boolean) : [];
+      const laudosNote =
+        laudosList.length > 0
+          ? `\n\nLaudos disponíveis: ${laudosList.join(', ')}`
+          : '';
+      const { listing } = await api.createListing({
         companyId,
         categoryId,
         materialId: materialId || undefined,
         type,
         title,
-        description,
+        description: description
+          ? `${description}${laudosNote}`
+          : laudosNote.trim() || undefined,
         quantity,
         unit,
         unitPrice: unitPrice || undefined,
         frequency,
         riskClassification,
         originDetails: originDetails || undefined,
-        ownTransport,
+        ownTransport: type === 'SELL' ? ownTransport : undefined,
         requiresDocuments,
         city,
         state,
       });
+      await api.submitListing(listing.id);
       router.push('/dashboard/anuncios');
     } catch {
       setError(
-        'Não foi possível criar o anúncio. Confira os dados e tente novamente.',
+        'Não foi possível publicar o anúncio. Confira os dados e tente novamente.',
       );
     } finally {
       setSaving(false);
@@ -187,23 +197,74 @@ export default function NewListingPage() {
             />
           </label>
           <div className="form-options">
-            <label className="form-check">
-              <input
-                type="checkbox"
-                checked={ownTransport}
-                onChange={(event) => setOwnTransport(event.target.checked)}
-              />
-              <span>Possui transporte próprio</span>
-            </label>
-            <label className="form-check">
-              <input
-                type="checkbox"
-                checked={requiresDocuments}
-                onChange={(event) => setRequiresDocuments(event.target.checked)}
-              />
-              <span>Exige documentos para negociar</span>
-            </label>
+            {type === 'SELL' && (
+              <label className="form-check">
+                <input
+                  type="checkbox"
+                  checked={ownTransport}
+                  onChange={(event) => setOwnTransport(event.target.checked)}
+                />
+                <span>Possui transporte próprio</span>
+              </label>
+            )}
+            {type === 'BUY' && (
+              <label className="form-check">
+                <input
+                  type="checkbox"
+                  checked={requiresDocuments}
+                  onChange={(event) =>
+                    setRequiresDocuments(event.target.checked)
+                  }
+                />
+                <span>Exigir laudos</span>
+              </label>
+            )}
+            {type === 'SELL' && (
+              <label className="form-check">
+                <input
+                  type="checkbox"
+                  checked={hasLaudos}
+                  onChange={(event) => setHasLaudos(event.target.checked)}
+                />
+                <span>Possui laudos?</span>
+              </label>
+            )}
           </div>
+          {type === 'SELL' && hasLaudos && (
+            <div className="laudos-list">
+              <label>
+                Documentos dos laudos
+                {laudos.map((value, index) => (
+                  <div className="laudo-row" key={index}>
+                    <input
+                      type="file"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        const next = [...laudos];
+                        next[index] = file ? file.name : value;
+                        setLaudos(next);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLaudos(laudos.filter((_, i) => i !== index))
+                      }
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="button small"
+                  onClick={() => setLaudos([...laudos, ''])}
+                >
+                  Adicionar documento
+                </button>
+              </label>
+            </div>
+          )}
           <label>
             Título do anúncio *
             <input
@@ -308,7 +369,7 @@ export default function NewListingPage() {
             </p>
           )}
           <button className="button" disabled={saving}>
-            {saving ? 'Salvando...' : 'Salvar rascunho'}{' '}
+            {saving ? 'Publicando...' : 'Publicar anúncio'}{' '}
             <ArrowRight size={16} />
           </button>
         </form>

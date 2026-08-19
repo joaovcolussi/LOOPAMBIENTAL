@@ -2,7 +2,7 @@
   "name": "@loopambiental/api",
   "private": true,
   "scripts": {
-    "dev": "nest start --watch --entryFile apps/api/src/main --env-file ../../.env",
+    "dev": "nest start --watch --env-file ../../.env",
     "build": "nest build",
     "lint": "prettier --check \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",

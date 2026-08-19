@@ -2444,3 +2444,47 @@ h3 {
     gap: 3px;
   }
 }
+
+.laudos-list {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-muted);
+}
+.laudo-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+.laudo-row input[type='file'] {
+  flex: 1;
+}
+.laudo-row button {
+  border: none;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 13px;
+}
+.form-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--surface-muted-foreground, #5a6b5a);
+}
+.empty-state {
+  padding: 32px;
+  color: var(--surface-muted-foreground, #5a6b5a);
+  text-align: center;
+}
+.admin-bar-row {
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+.admin-split a {
+  text-decoration: none;
+  color: inherit;
+}

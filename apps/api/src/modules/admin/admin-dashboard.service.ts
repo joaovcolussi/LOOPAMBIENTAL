@@ -31,7 +31,7 @@ export class AdminDashboardService {
       this.prisma.listing.findMany({
         where: { status: 'PUBLISHED', deletedAt: null },
         select: {
-          category: { select: { name: true } },
+          category: { select: { id: true, name: true } },
           type: true,
           _count: { select: { proposals: true } },
         },
@@ -69,10 +69,11 @@ export class AdminDashboardService {
     );
     const demandMap = new Map<
       string,
-      { listings: number; proposals: number }
+      { id: string; listings: number; proposals: number }
     >();
     for (const listing of publishedListings) {
       const current = demandMap.get(listing.category.name) ?? {
+        id: listing.category.id,
         listings: 0,
         proposals: 0,
       };
@@ -124,7 +125,10 @@ export class AdminDashboardService {
         total: item._count._all,
       })),
       demandByCategory: [...demandMap.entries()]
-        .map(([category, values]) => ({ category, ...values }))
+        .map(([category, values]) => ({
+          category,
+          ...values,
+        }))
         .sort((left, right) => right.proposals - left.proposals),
     };
   }

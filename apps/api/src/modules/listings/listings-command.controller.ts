@@ -34,6 +34,7 @@ type ListingBody = {
 @UseGuards(AuthGuard)
 export class ListingsCommandController {
   constructor(private readonly listingsService: ListingsService) {}
+
   @Post()
   async create(
     @Req() request: AuthenticatedRequest,

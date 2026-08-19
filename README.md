@@ -20,9 +20,26 @@ ainda não processa jobs BullMQ reais.
 
 - Node.js LTS, recomendado Node 22 ou 24.
 - Corepack habilitado.
-- Docker Desktop com Docker Compose.
+- Docker Compose ou Podman com `podman compose`.
 - Git, caso o projeto seja obtido por repositório.
 - Aproximadamente 8 GB de RAM para todos os serviços.
+
+### Matriz de ambientes
+
+| Ambiente | Runtime de containers | Terminal | Observação |
+| -------- | ---------------------- | -------- | ---------- |
+| Windows 10/11 | Docker Desktop com engine Linux | PowerShell | Ative WSL2 no Docker Desktop |
+| Windows 10/11 | Podman Machine | PowerShell | A máquina virtual do Podman é obrigatória |
+| Linux | Podman rootless ou Docker Engine | Bash | Podman Machine não é necessária |
+| macOS | Docker Desktop ou Podman Machine | Terminal | O fluxo é equivalente ao Windows |
+
+Para o modo containerizado, Node.js só é necessário no host para executar os
+comandos Prisma de criação do schema e dos dados demo. Para desenvolvimento com
+hot reload, Node.js e pnpm são obrigatórios.
+
+Antes de iniciar, confirme que as portas `3000`, `3001`, `3306`, `6379`,
+`9000`, `9001`, `1025` e `8025` estão livres. Não instale dependências usando
+mistura de `npm`, `yarn` e `pnpm`: o projeto usa exclusivamente pnpm `9.15.5`.
 
 Verifique as instalações:
 
@@ -34,7 +51,70 @@ docker compose version
 ```
 
 No Windows, execute os comandos no PowerShell. Linux e macOS usam os mesmos
-comandos `pnpm`, `docker` e `cp`.
+comandos `pnpm`, `docker` e `cp`. Em Linux com Podman, use `podman --version` e
+`podman compose version`.
+
+### Podman no Linux
+
+O fluxo suportado usa containers rootless e não exige Docker Desktop. Instale o
+Podman e um provedor Compose compatível (`podman compose` ou `podman-compose`),
+depois execute na raiz do projeto:
+
+```bash
+podman machine init 2>/dev/null || true
+podman machine start 2>/dev/null || true
+podman compose build
+podman compose up -d
+podman compose ps
+```
+
+No Linux nativo, os comandos `podman machine` podem ser omitidos. A stack inclui
+API, frontend, worker, MySQL, Redis, MinIO e Mailpit. Os serviços ficam
+acessíveis somente em `127.0.0.1` por padrão. Os dados persistem nos volumes
+nomeados `mysql-data` e `minio-data`.
+
+### Podman no Windows
+
+No Windows, o Podman executa os containers dentro de uma máquina virtual. Abra
+PowerShell ou Windows Terminal e execute:
+
+```powershell
+podman machine init
+podman machine start
+podman compose build
+podman compose up -d
+podman compose ps
+```
+
+Se a máquina já existir, `podman machine init` pode informar que ela já está
+criada; nesse caso, execute apenas `podman machine start`. Para acessar a
+aplicação, use `http://localhost:3000`. Se uma porta estiver ocupada, pare o
+processo correspondente ou altere o mapeamento no `docker-compose.yml`.
+
+### Docker Desktop no Windows ou Linux
+
+Docker Desktop no Windows e Docker Engine no Linux usam o mesmo Compose:
+
+```bash
+docker compose build
+docker compose up -d
+docker compose ps
+```
+
+No PowerShell, os mesmos comandos funcionam com `docker compose`. Não execute
+`docker-compose` antigo se o comando moderno `docker compose` estiver disponível.
+
+Para acompanhar ou parar a stack:
+
+```bash
+podman compose logs -f api
+podman compose stop
+podman compose down
+```
+
+Não use `podman compose down -v` sem confirmar: isso remove o banco local e os
+arquivos do MinIO. Em hosts Linux com SELinux, prefira os volumes nomeados já
+configurados; ao adicionar bind mounts, avalie os rótulos `:Z` ou `:z`.
 
 ## Instalação em Outro Computador
 
@@ -103,12 +183,17 @@ NEXT_PUBLIC_API_URL="http://localhost:3001/api/v1"
 
 Nunca publique `.env`, `.env.local`, tokens, senhas reais ou chaves de produção.
 
-### 4. Subir MySQL, Redis, MinIO e Mailpit
+### 4. Subir a stack de serviços
 
 ```bash
 docker compose up -d
 docker compose ps
 ```
+
+Com Podman, substitua `docker compose` por `podman compose`. O Compose inicia a
+API, o frontend, o worker e as dependências. Os healthchecks aguardam MySQL e
+Mailpit antes da API, e a API antes do frontend. Em uma primeira execução, o
+download das imagens e o build podem levar alguns minutos.
 
 Aguarde o MySQL iniciar antes do Prisma. Os serviços locais são:
 
@@ -149,7 +234,48 @@ empresas, oportunidades, propostas, conversas e notificações demonstrativas.
 
 ## Executar o Projeto
 
-### Opção recomendada: três terminais
+### Opção A: stack containerizada
+
+Depois de executar `compose up -d`, abra `http://localhost:3000`. A API e o
+worker já estão rodando dentro dos containers. Para carregar o banco e os dados
+demo, execute os comandos Prisma no host depois que o serviço MySQL estiver
+saudável:
+
+```bash
+corepack pnpm --filter @loopambiental/database generate
+corepack pnpm --filter @loopambiental/database db:push
+corepack pnpm --filter @loopambiental/database db:demo
+```
+
+No PowerShell, os comandos `corepack pnpm` são iguais. O `.env` do host usa
+`localhost`; a API containerizada usa internamente o hostname `mysql`, já
+configurado no Compose.
+
+### Opção B: desenvolvimento com Node no host
+
+Use esta opção quando precisar de hot reload. Mantenha somente MySQL, Redis,
+MinIO e Mailpit no Compose e execute API, frontend e worker em terminais locais.
+
+#### Windows PowerShell
+
+```powershell
+corepack pnpm --filter @loopambiental/api dev
+corepack pnpm --filter @loopambiental/web dev
+corepack pnpm --filter @loopambiental/worker dev
+```
+
+#### Linux/macOS
+
+```bash
+corepack pnpm --filter @loopambiental/api dev
+corepack pnpm --filter @loopambiental/web dev
+corepack pnpm --filter @loopambiental/worker dev
+```
+
+Não execute a opção A e a opção B ao mesmo tempo, pois ambas usam as portas
+3000 e 3001.
+
+### Opção C: três terminais (atalho)
 
 O frontend separa os artefatos de desenvolvimento (`.next-dev`) e produção
 (`.next`). Para desenvolvimento, abra três terminais na raiz do projeto.
@@ -447,6 +573,58 @@ Testes E2E de navegador continuam pendentes.
 
 ## Troubleshooting
 
+### Compose não encontrado
+
+Use o comando correspondente ao runtime instalado:
+
+```bash
+docker compose version
+podman compose version
+```
+
+Se `podman compose` não existir, instale o pacote/provedor Compose da sua
+distribuição ou use `podman-compose`. Os comandos do restante deste documento
+devem substituir `podman compose` por `podman-compose` nesse caso.
+
+### Container não inicia ou fica `unhealthy`
+
+Confira o estado e os logs de cada serviço:
+
+```bash
+docker compose ps
+docker compose logs mysql
+docker compose logs api
+docker compose logs web
+```
+
+Com Podman, substitua `docker compose` por `podman compose`. Espere o MySQL
+terminar a inicialização na primeira execução. Se o banco já tiver dados de uma
+configuração anterior, não remova os volumes antes de investigar.
+
+### Erro de permissão no Podman/Linux
+
+Use rootless como usuário normal e não execute a stack com `sudo` sem uma razão
+específica. A configuração usa volumes nomeados para evitar problemas comuns de
+ownership e SELinux. Para bind mounts adicionais em hosts SELinux, use `:Z` para
+uso exclusivo do container ou `:z` para compartilhamento controlado.
+
+### Porta ocupada no Windows
+
+```powershell
+Get-NetTCPConnection -LocalPort 3000,3001,3306,6379 -ErrorAction SilentlyContinue
+```
+
+Pare somente o processo responsável ou altere a porta publicada no Compose. Não
+altere a porta interna usada pelos serviços sem atualizar as variáveis de ambiente.
+
+### Porta ocupada no Linux/macOS
+
+```bash
+ss -ltnp | grep -E ':3000|:3001|:3306|:6379|:9000|:9001|:1025|:8025'
+```
+
+Pare somente o processo do projeto que estiver ocupando a porta.
+
 ### API não inicia
 
 Confirme que `.env` existe na raiz e contém `DATABASE_URL`. Confira:
@@ -538,7 +716,8 @@ apps/web                 Frontend Next.js
 apps/api                 API NestJS
 apps/worker              Worker de jobs
 packages/database        Prisma schema e client
-docker-compose.yml       MySQL, Redis, MinIO e Mailpit
+docker-compose.yml       Stack local Podman/Docker
+infra/docker              Containerfiles OCI da aplicação
 schema.sql               Provisionamento manual MySQL
 ```
 

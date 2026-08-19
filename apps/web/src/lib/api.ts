@@ -51,6 +51,7 @@ export type Company = {
   description: string | null;
   city: string | null;
   state: string | null;
+  taxIdMasked?: string | null;
   contactName?: string | null;
   contactEmail?: string | null;
   contactWhatsapp?: string | null;
@@ -121,6 +122,7 @@ export type ListingCard = {
   type: 'BUY' | 'SELL';
   title: string;
   slug: string;
+  status: string;
   quantity: string;
   availableQuantity: string;
   unit: string;
@@ -242,7 +244,12 @@ export type AdminStats = {
   listingsByType: { type: string; total: number }[];
   proposalsByStatus: { status: string; total: number }[];
   dealsByStatus: { status: string; total: number }[];
-  demandByCategory: { category: string; listings: number; proposals: number }[];
+  demandByCategory: {
+    category: string;
+    id: string;
+    listings: number;
+    proposals: number;
+  }[];
 };
 export type AdminUser = {
   id: string;
@@ -328,6 +335,15 @@ export const api = {
       description: string;
       city: string;
       state: string;
+      taxId: string;
+      contactName: string;
+      contactEmail: string;
+      contactWhatsapp: string;
+      addressLine: string;
+      addressNumber: string;
+      addressDistrict: string;
+      addressPostalCode: string;
+      contactVisibility: 'PRIVATE' | 'MEMBERS' | 'PUBLIC';
     }>,
   ) =>
     request<{ company: Company }>(`/companies/${id}`, {
@@ -385,9 +401,14 @@ export const api = {
     city?: string;
     state?: string;
   }) =>
-    request<{ listing: unknown }>('/listings', {
+    request<{ listing: { id: string } }>('/listings', {
       method: 'POST',
       body: JSON.stringify(input),
+    }),
+  myListings: () => request<{ listings: ListingCard[] }>('/listings/mine'),
+  submitListing: (id: string) =>
+    request<{ listing: unknown }>(`/listings/${id}/submit`, {
+      method: 'POST',
     }),
   moderationCases: () =>
     request<{ cases: ModerationCase[] }>('/admin/moderation/cases'),

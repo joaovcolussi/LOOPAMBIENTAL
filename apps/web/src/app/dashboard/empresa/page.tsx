@@ -15,6 +15,7 @@ export default function CompanyPage() {
   const [state, setState] = useState('');
   const [description, setDescription] = useState('');
   const [taxId, setTaxId] = useState('');
+  const [taxIdMasked, setTaxIdMasked] = useState('');
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactWhatsapp, setContactWhatsapp] = useState('');
@@ -46,6 +47,8 @@ export default function CompanyPage() {
     setCity(value.city ?? '');
     setState(value.state ?? '');
     setDescription(value.description ?? '');
+    setTaxId('');
+    setTaxIdMasked(value.taxIdMasked ?? '');
     setContactName(value.contactName ?? '');
     setContactEmail(value.contactEmail ?? '');
     setContactWhatsapp(value.contactWhatsapp ?? '');
@@ -61,13 +64,12 @@ export default function CompanyPage() {
     setError('');
     setSaving(true);
     try {
-      const input = {
+      const input: Record<string, unknown> = {
         legalName,
         tradeName,
         city,
         state,
         description,
-        taxId,
         contactName,
         contactEmail,
         contactWhatsapp,
@@ -77,9 +79,10 @@ export default function CompanyPage() {
         addressPostalCode,
         contactVisibility,
       };
+      if (taxId) input.taxId = taxId;
       const result = company
         ? await api.updateCompany(company.id, input)
-        : await api.createCompany(input);
+        : await api.createCompany(input as { legalName: string });
       fill(result.company);
       router.push('/dashboard');
     } catch {
@@ -138,11 +141,21 @@ export default function CompanyPage() {
             <label>
               CNPJ
               <input
-                maxLength={30}
+                maxLength={14}
+                pattern="[A-Za-z0-9]{14}"
                 value={taxId}
-                onChange={(event) => setTaxId(event.target.value)}
-                placeholder="00.000.000/0000-00"
+                onChange={(event) =>
+                  setTaxId(
+                    event.target.value
+                      .replace(/[^A-Za-z0-9]/g, '')
+                      .slice(0, 14),
+                  )
+                }
+                placeholder="Somente 14 caracteres alfanuméricos"
               />
+              {taxIdMasked && !taxId && (
+                <small className="form-hint">CNPJ atual: {taxIdMasked}</small>
+              )}
             </label>
             <label>
               Responsável

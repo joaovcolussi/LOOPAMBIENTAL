@@ -6,22 +6,97 @@ services:
       MYSQL_DATABASE: loopambiental
       MYSQL_USER: loopambiental
       MYSQL_PASSWORD: loopambiental_local
-    ports: ['3306:3306']
+    ports: ['127.0.0.1:3306:3306']
     volumes: ['mysql-data:/var/lib/mysql']
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h localhost -u root -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 5s
+      timeout: 5s
+      retries: 20
   redis:
     image: redis:7-alpine
-    ports: ['6379:6379']
+    ports: ['127.0.0.1:6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: loopambiental
       MINIO_ROOT_PASSWORD: loopambiental_local
-    ports: ['9000:9000', '9001:9001']
+    ports: ['127.0.0.1:9000:9000', '127.0.0.1:9001:9001']
     volumes: ['minio-data:/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:9000/minio/health/live']
+      interval: 5s
+      timeout: 5s
+      retries: 20
   mailpit:
-    image: axllent/mailpit:latest
-    ports: ['1025:1025', '8025:8025']
+    image: axllent/mailpit:v1.21.8
+    ports: ['127.0.0.1:1025:1025', '127.0.0.1:8025:8025']
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://localhost:8025/readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/Containerfile.api
+    environment:
+      DATABASE_URL: mysql://loopambiental:loopambiental_local@mysql:3306/loopambiental
+      PORT: 3001
+      WEB_ORIGIN: http://localhost:3000
+      WEB_PUBLIC_URL: http://localhost:3000
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM: LOOP AMBIENTAL <no-reply@loopambiental.com>
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-admin@loopambiental.com}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-configure-a-strong-secret-in-production}
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
+      MP_API_URL: ${MP_API_URL:-https://api.mercadopago.com}
+    ports: ['127.0.0.1:3001:3001']
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3001/api/v1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Containerfile.worker
+    environment:
+      DATABASE_URL: mysql://loopambiental:loopambiental_local@mysql:3306/loopambiental
+    depends_on:
+      mysql:
+        condition: service_healthy
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/Containerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    ports: ['127.0.0.1:3000:3000']
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 volumes:
   mysql-data:
   minio-data:

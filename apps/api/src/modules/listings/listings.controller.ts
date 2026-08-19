@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { ListingsService } from './listings.service';
 
@@ -20,6 +21,14 @@ export class ListingsController {
     private readonly prisma: PrismaService,
     private readonly listingsService: ListingsService,
   ) {}
+
+  @Get('mine')
+  @UseGuards(AuthGuard)
+  async findMine(@Req() request: AuthenticatedRequest) {
+    return {
+      listings: await this.listingsService.findForUser(request.user.id),
+    };
+  }
 
   @Get(':slug')
   async findOne(@Param('slug') slug: string): Promise<{ listing: unknown }> {

@@ -9,41 +9,63 @@ import {
   Truck,
 } from 'lucide-react';
 import { SessionActions } from '../components/session-actions';
+import { ListingCard } from '../lib/api';
 
-const listings = [
-  {
-    title: 'Fardos de papelão ondulado',
-    slug: 'papelao-ondulado-limpo-demo',
-    company: 'Circular Materiais',
-    location: 'Campinas, SP',
-    quantity: '6 t disponíveis',
-    type: 'VENDA',
-    tone: 'mint',
-    image: '/products/papelao.svg',
-  },
-  {
-    title: 'Compra recorrente de alumínio prensado',
-    slug: 'compra-aluminio-prensado-demo',
-    company: 'Verde Norte',
-    location: 'São Paulo, SP',
-    quantity: '8 t mensais',
-    type: 'COMPRA',
-    tone: 'blue',
-    image: '/products/aluminio.svg',
-  },
-  {
-    title: 'PET cristal enfardado pós-consumo',
-    slug: 'pet-cristal-enfardado-demo',
-    company: 'Circular Materiais',
-    location: 'Guarulhos, SP',
-    quantity: '12,5 t disponíveis',
-    type: 'VENDA',
-    tone: 'sand',
-    image: '/products/pet.svg',
-  },
-];
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
-export default function HomePage() {
+type PublicStats = {
+  totalListings: number;
+  buyListings: number;
+  sellListings: number;
+  verifiedCompanies: number;
+  demandByCategory: {
+    id: string;
+    name: string;
+    slug: string;
+    listings: number;
+  }[];
+};
+
+async function fetchJson<T>(path: string): Promise<T | null> {
+  try {
+    const response = await fetch(`${API_URL}${path}`, {
+      cache: 'no-store',
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+export const dynamic = 'force-dynamic';
+
+export default async function HomePage() {
+  const [statsResult, listingsResult] = await Promise.all([
+    fetchJson<PublicStats>('/stats'),
+    fetchJson<{ data: ListingCard[] }>('/listings?pageSize=6'),
+  ]);
+
+  const stats = statsResult ?? {
+    totalListings: 0,
+    buyListings: 0,
+    sellListings: 0,
+    verifiedCompanies: 0,
+    demandByCategory: [],
+  };
+  const listings = listingsResult?.data ?? [];
+
+  const maxDemand = Math.max(
+    ...stats.demandByCategory.map((item) => item.listings),
+    1,
+  );
+
+  const formatQuantity = (listing: ListingCard) => {
+    const value = Number(listing.availableQuantity).toLocaleString('pt-BR');
+    return `${value} ${listing.unit} disponíveis`;
+  };
+
   return (
     <main>
       <nav className="nav shell">
@@ -103,27 +125,27 @@ export default function HomePage() {
           <div className="material-card card-float">
             <Recycle size={18} />
             <strong>ciclo industrial ativo</strong>
-            <span>+ 438 operações</span>
+            <span>+ {stats.totalListings} operações</span>
           </div>
         </div>
       </section>
 
       <section className="stats shell">
         <div>
-          <strong>Compra + venda</strong>
-          <span>no mesmo marketplace</span>
+          <strong>{stats.totalListings}</strong>
+          <span>anúncios publicados</span>
         </div>
         <div>
-          <strong>Propostas</strong>
-          <span>com histórico de negociação</span>
+          <strong>{stats.buyListings}</strong>
+          <span>demanda de compra</span>
         </div>
         <div>
-          <strong>Contato protegido</strong>
-          <span>conforme a permissão da empresa</span>
+          <strong>{stats.sellListings}</strong>
+          <span>oferta de venda</span>
         </div>
         <div>
-          <strong>Dados técnicos</strong>
-          <span>para decidir melhor</span>
+          <strong>{stats.verifiedCompanies}</strong>
+          <span>empresas verificadas</span>
         </div>
       </section>
 
@@ -132,8 +154,8 @@ export default function HomePage() {
           <p className="eyebrow">pulso da cadeia</p>
           <h2 id="pulse-title">Onde a indústria está encontrando valor.</h2>
           <p>
-            Uma visão demonstrativa das categorias com maior movimento na rede
-            LOOP AMBIENTAL neste ciclo.
+            Distribuição dos anúncios publicados por categoria na rede LOOP
+            AMBIENTAL.
           </p>
           <a className="text-link" href="/anuncios">
             Ver oportunidades ativas <ArrowRight size={16} />
@@ -145,38 +167,32 @@ export default function HomePage() {
           aria-label="Movimento por categoria"
         >
           <div className="pulse-chart-header">
-            <span>movimento por categoria</span>
-            <strong>+18,4%</strong>
+            <span>anúncios por categoria</span>
+            <strong>{stats.totalListings}</strong>
           </div>
           <div className="chart-bars">
-            <div className="chart-row">
-              <span>Metais</span>
-              <div>
-                <i style={{ width: '88%' }} />
+            {stats.demandByCategory.slice(0, 5).map((item) => (
+              <div className="chart-row" key={item.id}>
+                <span>{item.name}</span>
+                <div>
+                  <i
+                    style={{
+                      width: `${Math.max((item.listings / maxDemand) * 100, 5)}%`,
+                    }}
+                  />
+                </div>
+                <b>{item.listings}</b>
               </div>
-              <b>88%</b>
-            </div>
-            <div className="chart-row">
-              <span>Plásticos</span>
-              <div>
-                <i style={{ width: '72%' }} />
+            ))}
+            {stats.demandByCategory.length === 0 && (
+              <div className="chart-row">
+                <span>Ainda não há dados.</span>
+                <div>
+                  <i style={{ width: '5%' }} />
+                </div>
+                <b>0</b>
               </div>
-              <b>72%</b>
-            </div>
-            <div className="chart-row">
-              <span>Papel</span>
-              <div>
-                <i style={{ width: '61%' }} />
-              </div>
-              <b>61%</b>
-            </div>
-            <div className="chart-row">
-              <span>Madeira</span>
-              <div>
-                <i style={{ width: '46%' }} />
-              </div>
-              <b>46%</b>
-            </div>
+            )}
           </div>
         </div>
       </section>
@@ -249,52 +265,64 @@ export default function HomePage() {
           </form>
         </div>
         <div className="listing-grid">
-          {listings.map((listing) => (
-            <article className="listing" key={listing.title}>
-              <div className={`listing-image ${listing.tone}`}>
-                <img
-                  src={listing.image}
-                  alt={`Foto de ${listing.title}`}
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                />
-                <span className={`listing-type ${listing.type.toLowerCase()}`}>
-                  {listing.type}
-                </span>
-              </div>
-              <div className="listing-body">
-                <div className="listing-meta">
-                  <span>{listing.company}</span>
-                  <span className="verified">verificada</span>
-                </div>
-                <h3>
-                  <a
-                    className="listing-title-link"
-                    href={`/anuncios/${listing.slug}`}
+          {listings.length === 0 ? (
+            <p className="empty-state">Ainda não há anúncios publicados.</p>
+          ) : (
+            listings.map((listing) => (
+              <article className="listing" key={listing.id}>
+                <div
+                  className={`listing-image ${
+                    listing.type === 'BUY' ? 'blue' : 'mint'
+                  }`}
+                >
+                  <span
+                    className={`listing-type ${listing.type.toLowerCase()}`}
                   >
-                    {listing.title}
-                  </a>
-                </h3>
-                <div className="listing-detail">
-                  <span>{listing.quantity}</span>
-                  <span>
-                    <MapPin size={14} />
-                    {listing.location}
+                    {listing.type === 'BUY' ? 'COMPRA' : 'VENDA'}
                   </span>
                 </div>
-                <div className="listing-footer">
-                  <strong>Disponível agora</strong>
-                  <a
-                    className="listing-arrow"
-                    href={`/anuncios/${listing.slug}`}
-                    aria-label={`Ver ${listing.title}`}
-                  >
-                    <ArrowRight size={17} />
-                  </a>
+                <div className="listing-body">
+                  <div className="listing-meta">
+                    <span>
+                      {listing.company.tradeName || listing.company.legalName}
+                    </span>
+                    {listing.company.verification === 'VERIFIED' && (
+                      <span className="verified">verificada</span>
+                    )}
+                  </div>
+                  <h3>
+                    <a
+                      className="listing-title-link"
+                      href={`/anuncios/${listing.slug}`}
+                    >
+                      {listing.title}
+                    </a>
+                  </h3>
+                  <div className="listing-detail">
+                    <span>{formatQuantity(listing)}</span>
+                    <span>
+                      <MapPin size={14} />
+                      {listing.city ? `${listing.city}, ${listing.state}` : '—'}
+                    </span>
+                  </div>
+                  <div className="listing-footer">
+                    <strong>
+                      {listing.unitPrice
+                        ? `R$ ${Number(listing.unitPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / ${listing.unit}`
+                        : 'Preço sob consulta'}
+                    </strong>
+                    <a
+                      className="listing-arrow"
+                      href={`/anuncios/${listing.slug}`}
+                      aria-label={`Ver ${listing.title}`}
+                    >
+                      <ArrowRight size={17} />
+                    </a>
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            ))
+          )}
         </div>
       </section>
 

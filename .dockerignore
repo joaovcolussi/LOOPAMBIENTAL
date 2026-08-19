@@ -1,9 +1,12 @@
-node_modules
+.git
 .next
 .next-dev
+node_modules
 dist
 coverage
 *.tsbuildinfo
 .env
 .env.*
 !.env.example
+cookies-test.txt
+README.md

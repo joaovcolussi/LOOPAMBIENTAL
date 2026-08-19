@@ -37,8 +37,7 @@ export default function DashboardPage() {
           <a className="back-link" href="/anuncios">
             Explorar anúncios
           </a>
-          {(user.platformRole === 'ADMIN' ||
-            user.platformRole === 'MODERATOR') && (
+          {user.platformRole === 'ADMIN' && (
             <a className="back-link" href="/admin">
               Administração
             </a>
@@ -63,22 +62,6 @@ export default function DashboardPage() {
             </a>
           </article>
           <article>
-            <span className="dashboard-number">05</span>
-            <h2>Converse com parceiros</h2>
-            <p>Troque mensagens dentro da plataforma.</p>
-            <a href="/dashboard/mensagens">
-              Abrir mensagens <ArrowRight size={15} />
-            </a>
-          </article>
-          <article>
-            <span className="dashboard-number">04</span>
-            <h2>Negocie propostas</h2>
-            <p>Veja as oportunidades comerciais da sua empresa.</p>
-            <a href="/dashboard/propostas">
-              Ver propostas <ArrowRight size={15} />
-            </a>
-          </article>
-          <article>
             <span className="dashboard-number">02</span>
             <h2>Publique um anúncio</h2>
             <p>Encontre compradores ou fornecedores para seus materiais.</p>
@@ -92,6 +75,22 @@ export default function DashboardPage() {
             <p>Acompanhe anúncios interessantes em um só lugar.</p>
             <a href="/dashboard/favoritos">
               Ver favoritos <ArrowRight size={15} />
+            </a>
+          </article>
+          <article>
+            <span className="dashboard-number">04</span>
+            <h2>Negocie propostas</h2>
+            <p>Veja as oportunidades comerciais da sua empresa.</p>
+            <a href="/dashboard/propostas">
+              Ver propostas <ArrowRight size={15} />
+            </a>
+          </article>
+          <article>
+            <span className="dashboard-number">05</span>
+            <h2>Converse com parceiros</h2>
+            <p>Troque mensagens dentro da plataforma.</p>
+            <a href="/dashboard/mensagens">
+              Abrir mensagens <ArrowRight size={15} />
             </a>
           </article>
           <article>

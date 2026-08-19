@@ -189,7 +189,11 @@ export default function AdminDashboardPage() {
             ) : (
               <div className="admin-bars">
                 {stats.demandByCategory.map((item) => (
-                  <div className="admin-bar-row" key={item.category}>
+                  <a
+                    className="admin-bar-row"
+                    href={`/anuncios?categoryId=${item.id}`}
+                    key={item.category}
+                  >
                     <div>
                       <strong>{item.category}</strong>
                       <span>
@@ -203,7 +207,7 @@ export default function AdminDashboardPage() {
                         }}
                       />
                     </div>
-                  </div>
+                  </a>
                 ))}
               </div>
             )}
@@ -217,28 +221,30 @@ export default function AdminDashboardPage() {
               <Recycle size={20} />
             </div>
             <div className="admin-split">
-              <div>
+              <a href="/anuncios?type=BUY">
                 <strong>
                   {stats.listingsByType.find((item) => item.type === 'BUY')
                     ?.total ?? 0}
                 </strong>
                 <span>compras</span>
-              </div>
-              <div>
+              </a>
+              <a href="/anuncios?type=SELL">
                 <strong>
                   {stats.listingsByType.find((item) => item.type === 'SELL')
                     ?.total ?? 0}
                 </strong>
                 <span>vendas</span>
-              </div>
+              </a>
             </div>
             <div className="admin-status-list">
-              {stats.proposalsByStatus.map((item) => (
-                <div key={item.status}>
-                  <span>{item.status}</span>
-                  <b>{item.total}</b>
-                </div>
-              ))}
+              {stats.proposalsByStatus
+                .filter((item) => item.status !== 'PENDING')
+                .map((item) => (
+                  <div key={item.status}>
+                    <span>{item.status}</span>
+                    <b>{item.total}</b>
+                  </div>
+                ))}
             </div>
           </section>
         </div>

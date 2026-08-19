@@ -85,6 +85,20 @@ const listingDetailSelect = {
 export class ListingsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findForUser(userId: string): Promise<unknown> {
+    const memberships = await this.prisma.companyMember.findMany({
+      where: { userId },
+      select: { companyId: true },
+    });
+    const companyIds = memberships.map((m) => m.companyId);
+    if (companyIds.length === 0) return [];
+    return this.prisma.listing.findMany({
+      where: { companyId: { in: companyIds }, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: listingSelect,
+    });
+  }
+
   async findPublishedBySlug(slug: string): Promise<unknown> {
     const listing = await this.prisma.listing.findFirst({
       where: { slug, status: 'PUBLISHED', deletedAt: null },

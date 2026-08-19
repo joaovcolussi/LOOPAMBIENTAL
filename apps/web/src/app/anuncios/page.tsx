@@ -23,6 +23,7 @@ export default function ListingsPage() {
   const [listings, setListings] = useState<ListingCard[]>([]);
   const [query, setQuery] = useState('');
   const [type, setType] = useState<'ALL' | 'BUY' | 'SELL'>('ALL');
+  const [categoryId, setCategoryId] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -47,6 +48,8 @@ export default function ListingsPage() {
     const requestedType = params.get('type');
     if (requestedType === 'BUY' || requestedType === 'SELL')
       setType(requestedType);
+    const requestedCategory = params.get('categoryId');
+    if (requestedCategory) setCategoryId(requestedCategory);
   }, []);
 
   useEffect(() => {
@@ -59,6 +62,7 @@ export default function ListingsPage() {
         pageSize: 12,
         q: query.trim() || undefined,
         type: type === 'ALL' ? undefined : type,
+        categoryId: categoryId || undefined,
       })
       .then((result) => {
         if (!active) return;
@@ -75,7 +79,7 @@ export default function ListingsPage() {
     return () => {
       active = false;
     };
-  }, [page, query, type]);
+  }, [page, query, type, categoryId]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -83,6 +87,7 @@ export default function ListingsPage() {
     const params = new URLSearchParams();
     if (query.trim()) params.set('q', query.trim());
     if (type !== 'ALL') params.set('type', type);
+    if (categoryId) params.set('categoryId', categoryId);
     window.history.replaceState(
       null,
       '',

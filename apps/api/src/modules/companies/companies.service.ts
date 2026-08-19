@@ -1,9 +1,15 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { createCipheriv, createHash, randomBytes } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'node:crypto';
 import { PrismaService } from '../../infrastructure/prisma.service';
 
 export type CompanyInput = {
@@ -28,6 +34,7 @@ export class CompaniesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(userId: string, input: CompanyInput & { legalName: string }) {
+    const taxId = this.normalizeTaxId(input.taxId);
     const company = await this.prisma.company.create({
       data: {
         legalName: input.legalName,
@@ -35,8 +42,8 @@ export class CompaniesService {
         description: input.description,
         city: input.city,
         state: input.state?.toUpperCase(),
-        taxIdHash: input.taxId ? this.hashTaxId(input.taxId) : undefined,
-        taxIdEncrypted: input.taxId ? this.encrypt(input.taxId) : undefined,
+        taxIdHash: taxId ? this.hashTaxId(taxId) : undefined,
+        taxIdEncrypted: taxId ? this.encrypt(taxId) : undefined,
         contactName: input.contactName,
         contactEmail: input.contactEmail,
         contactWhatsapp: input.contactWhatsapp,
@@ -50,15 +57,16 @@ export class CompaniesService {
       },
       select: this.companySelect,
     });
-    return company;
+    return this.withMaskedTaxId(company, taxId);
   }
 
   async listForUser(userId: string) {
-    return this.prisma.company.findMany({
+    const companies = await this.prisma.company.findMany({
       where: { deletedAt: null, members: { some: { userId } } },
       orderBy: { createdAt: 'desc' },
       select: this.companySelect,
     });
+    return companies.map((company) => this.withMaskedTaxId(company));
   }
 
   async findById(id: string, userId: string) {
@@ -67,15 +75,16 @@ export class CompaniesService {
       select: this.companySelect,
     });
     if (!company) throw new NotFoundException('COMPANY_NOT_FOUND');
-    if (company.contactVisibility === 'PUBLIC') return company;
+    const masked = this.withMaskedTaxId(company);
+    if (company.contactVisibility === 'PUBLIC') return masked;
     if (company.contactVisibility === 'MEMBERS') {
       const membership = await this.prisma.companyMember.findUnique({
         where: { companyId_userId: { companyId: id, userId } },
       });
-      if (membership) return company;
+      if (membership) return masked;
     }
     return {
-      ...company,
+      ...masked,
       contactName: null,
       contactEmail: null,
       contactWhatsapp: null,
@@ -88,7 +97,9 @@ export class CompaniesService {
 
   async update(userId: string, id: string, input: Partial<CompanyInput>) {
     await this.assertCanManage(userId, id);
-    return this.prisma.company.update({
+    const taxId =
+      input.taxId !== undefined ? this.normalizeTaxId(input.taxId) : undefined;
+    const company = await this.prisma.company.update({
       where: { id },
       data: {
         ...(input.legalName !== undefined
@@ -104,11 +115,13 @@ export class CompaniesService {
         ...(input.state !== undefined
           ? { state: input.state.toUpperCase() }
           : {}),
-        ...(input.taxId
-          ? {
-              taxIdHash: this.hashTaxId(input.taxId),
-              taxIdEncrypted: this.encrypt(input.taxId),
-            }
+        ...(taxId !== undefined
+          ? taxId
+            ? {
+                taxIdHash: this.hashTaxId(taxId),
+                taxIdEncrypted: this.encrypt(taxId),
+              }
+            : { taxIdHash: null, taxIdEncrypted: null }
           : {}),
         ...(input.contactName !== undefined
           ? { contactName: input.contactName }
@@ -137,6 +150,7 @@ export class CompaniesService {
       },
       select: this.companySelect,
     });
+    return this.withMaskedTaxId(company, taxId);
   }
 
   private async assertCanManage(userId: string, companyId: string) {
@@ -149,8 +163,17 @@ export class CompaniesService {
     }
   }
 
+  private normalizeTaxId(value?: string) {
+    if (!value) return '';
+    const normalized = value.replace(/[^A-Za-z0-9]/g, '');
+    if (normalized.length !== 14) {
+      throw new BadRequestException('INVALID_TAX_ID');
+    }
+    return normalized;
+  }
+
   private hashTaxId(value: string) {
-    return createHash('sha256').update(value.replace(/\D/g, '')).digest('hex');
+    return createHash('sha256').update(value.toLowerCase()).digest('hex');
   }
 
   private encrypt(value: string) {
@@ -163,6 +186,50 @@ export class CompaniesService {
     return `v1:${iv.toString('base64url')}:${cipher.getAuthTag().toString('base64url')}:${encrypted.toString('base64url')}`;
   }
 
+  private decrypt(value: string) {
+    try {
+      const [, ivB64, tagB64, dataB64] = value.split(':');
+      if (!ivB64 || !tagB64 || !dataB64) return null;
+      const key = createHash('sha256')
+        .update(process.env.FIELD_ENCRYPTION_KEY ?? 'loop-local-field-key')
+        .digest();
+      const decipher = createDecipheriv(
+        'aes-256-gcm',
+        key,
+        Buffer.from(ivB64, 'base64url'),
+      );
+      decipher.setAuthTag(Buffer.from(tagB64, 'base64url'));
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(dataB64, 'base64url')),
+        decipher.final(),
+      ]);
+      return decrypted.toString('utf8');
+    } catch {
+      return null;
+    }
+  }
+
+  private maskTaxId(value: string) {
+    if (value.length !== 14) return value;
+    return `${value.slice(0, 2)}.${value.slice(2, 5)}.XXX/XXXX-${value.slice(12)}`;
+  }
+
+  private withMaskedTaxId(
+    company: Record<string, unknown>,
+    explicitTaxId?: string,
+  ) {
+    const encrypted =
+      typeof company.taxIdEncrypted === 'string'
+        ? company.taxIdEncrypted
+        : null;
+    const taxId = explicitTaxId ?? (encrypted ? this.decrypt(encrypted) : null);
+    const { taxIdEncrypted, ...rest } = company;
+    return {
+      ...rest,
+      taxIdMasked: taxId ? this.maskTaxId(taxId) : null,
+    };
+  }
+
   private readonly companySelect = {
     id: true,
     legalName: true,
@@ -170,6 +237,7 @@ export class CompaniesService {
     description: true,
     city: true,
     state: true,
+    taxIdEncrypted: true,
     contactName: true,
     contactEmail: true,
     contactWhatsapp: true,

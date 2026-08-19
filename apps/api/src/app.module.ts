@@ -17,6 +17,7 @@ import {
   CategoriesController,
   MaterialsController,
 } from './modules/catalog/catalog.controller';
+import { StatsController } from './modules/catalog/stats.controller';
 import { AdminGuard } from './modules/auth/admin.guard';
 import { ModerationController } from './modules/moderation/moderation.controller';
 import { ModerationService } from './modules/moderation/moderation.service';
@@ -65,6 +66,7 @@ class HealthController {
     CompaniesController,
     CategoriesController,
     MaterialsController,
+    StatsController,
     ModerationController,
     FavoritesController,
     ProposalsController,

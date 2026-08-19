@@ -17,11 +17,7 @@ export class AdminGuard implements CanActivate {
     const isConfiguredAdmin = configuredEmails.includes(
       request.user.email.toLowerCase(),
     );
-    if (
-      request.user.platformRole !== 'ADMIN' &&
-      request.user.platformRole !== 'MODERATOR' &&
-      !isConfiguredAdmin
-    )
+    if (request.user.platformRole !== 'ADMIN' && !isConfiguredAdmin)
       throw new ForbiddenException('PLATFORM_ADMIN_REQUIRED');
     return true;
   }

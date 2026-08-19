@@ -28,6 +28,6 @@ describe('CompaniesService', () => {
 
     await expect(
       service.update('user-id', 'company-id', { tradeName: 'Novo nome' }),
-    ).resolves.toEqual(updated);
+    ).resolves.toEqual({ ...updated, taxIdMasked: null });
   });
 });
