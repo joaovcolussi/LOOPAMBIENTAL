@@ -5,14 +5,21 @@ import { ArrowLeft, ArrowRight, Recycle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api, isAuthenticationError, Proposal } from '../../../lib/api';
 import { SessionActions } from '../../../components/session-actions';
+import { formatMoney, formatQuantity } from '../../../lib/format';
+
+const statusLabels: Record<string, string> = {
+  PENDING: 'Pendente',
+  COUNTERED: 'Contraproposta',
+  ACCEPTED: 'Aceita',
+  REJECTED: 'Rejeitada',
+  CANCELLED: 'Cancelada',
+  EXPIRED: 'Expirada',
+};
 
 export default function ProposalsPage() {
   const router = useRouter();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [checkoutError, setCheckoutError] = useState('');
-  const [actionError, setActionError] = useState('');
-  const [actingId, setActingId] = useState('');
   const [loadError, setLoadError] = useState('');
   useEffect(() => {
     api
@@ -28,49 +35,6 @@ export default function ProposalsPage() {
       })
       .finally(() => setLoading(false));
   }, [router]);
-  async function pay(dealId: string) {
-    setCheckoutError('');
-    try {
-      const payment = await api.createPaymentCheckout(
-        dealId,
-        window.crypto.randomUUID(),
-      );
-      if (payment.checkoutUrl) window.location.assign(payment.checkoutUrl);
-    } catch {
-      setCheckoutError(
-        'Não foi possível criar o checkout. Configure o Mercado Pago e tente novamente.',
-      );
-    }
-  }
-
-  async function actOnProposal(
-    proposal: Proposal,
-    action: 'accept' | 'reject' | 'counter',
-  ) {
-    setActionError('');
-    setActingId(proposal.id);
-    try {
-      if (action === 'accept') await api.acceptProposal(proposal.id);
-      if (action === 'reject') await api.rejectProposal(proposal.id);
-      if (action === 'counter') {
-        const quantity = window.prompt(
-          'Quantidade da contraproposta:',
-          proposal.quantity,
-        );
-        const unitPrice = window.prompt('Preço unitário:', proposal.unitPrice);
-        if (!quantity || !unitPrice) return;
-        await api.counterProposal(proposal.id, { quantity, unitPrice });
-      }
-      const result = await api.proposals();
-      setProposals(result.proposals);
-    } catch {
-      setActionError(
-        'Não foi possível atualizar esta proposta com sua empresa.',
-      );
-    } finally {
-      setActingId('');
-    }
-  }
   if (loading)
     return (
       <main className="dashboard-page">
@@ -96,8 +60,6 @@ export default function ProposalsPage() {
         <p className="dashboard-lede">
           Acompanhe as propostas enviadas e recebidas pelas suas empresas.
         </p>
-        {checkoutError && <p className="form-error">{checkoutError}</p>}
-        {actionError && <p className="form-error">{actionError}</p>}
         {loadError && <p className="form-error">{loadError}</p>}
         {proposals.length === 0 ? (
           <div className="empty-panel favorite-empty">
@@ -111,66 +73,30 @@ export default function ProposalsPage() {
             {proposals.map((proposal) => (
               <article className="favorite-card" key={proposal.id}>
                 <div>
-                  <span className="dashboard-number">{proposal.status}</span>
+                  <span
+                    className={`admin-user-status ${proposal.status.toLowerCase()}`}
+                  >
+                    {statusLabels[proposal.status] ?? proposal.status}
+                  </span>
                   <h2>{proposal.listing.title}</h2>
                   <p>
                     {proposal.proposerCompany.tradeName ||
                       proposal.proposerCompany.legalName}{' '}
-                    · {proposal.quantity} · {proposal.currency}{' '}
-                    {proposal.unitPrice}
+                    · {formatQuantity(proposal.quantity)} ·{' '}
+                    {formatMoney(proposal.unitPrice, proposal.currency)}
                   </p>
                   <small>
                     {proposal.deal
                       ? `Negociação ${proposal.deal.status}`
                       : 'Aguardando resposta'}
                   </small>
-                  {(proposal.status === 'PENDING' ||
-                    proposal.status === 'COUNTERED') && (
-                    <div className="proposal-actions">
-                      <button
-                        className="button small"
-                        type="button"
-                        disabled={actingId === proposal.id}
-                        onClick={() => void actOnProposal(proposal, 'accept')}
-                      >
-                        Aceitar
-                      </button>
-                      <button
-                        className="secondary-button small"
-                        type="button"
-                        disabled={actingId === proposal.id}
-                        onClick={() => void actOnProposal(proposal, 'counter')}
-                      >
-                        Contrapropor
-                      </button>
-                      <button
-                        className="link-button"
-                        type="button"
-                        disabled={actingId === proposal.id}
-                        onClick={() => void actOnProposal(proposal, 'reject')}
-                      >
-                        Rejeitar
-                      </button>
-                    </div>
-                  )}
+                  <a
+                    className="favorite-card-link text-link"
+                    href={`/dashboard/propostas/${proposal.id}`}
+                  >
+                    Visualizar proposta e conversa
+                  </a>
                 </div>
-                {proposal.deal && proposal.deal.status !== 'CANCELLED' && (
-                  <>
-                    <button
-                      className="button small"
-                      type="button"
-                      onClick={() => void pay(proposal.deal!.id)}
-                    >
-                      Pagar negociação
-                    </button>
-                    <a
-                      className="text-link"
-                      href={`/dashboard/logistica?dealId=${proposal.deal.id}`}
-                    >
-                      Solicitar logística
-                    </a>
-                  </>
-                )}
                 <ArrowRight size={17} />
               </article>
             ))}

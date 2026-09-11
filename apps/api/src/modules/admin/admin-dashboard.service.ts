@@ -24,8 +24,16 @@ export class AdminDashboardService {
     ] = await Promise.all([
       this.prisma.user.count({ where: { deletedAt: null } }),
       this.prisma.company.count({ where: { deletedAt: null } }),
-      this.prisma.listing.groupBy({ by: ['status'], _count: { _all: true } }),
-      this.prisma.listing.groupBy({ by: ['type'], _count: { _all: true } }),
+      this.prisma.listing.groupBy({
+        by: ['status'],
+        where: { deletedAt: null },
+        _count: { _all: true },
+      }),
+      this.prisma.listing.groupBy({
+        by: ['type'],
+        where: { deletedAt: null },
+        _count: { _all: true },
+      }),
       this.prisma.proposal.groupBy({ by: ['status'], _count: { _all: true } }),
       this.prisma.deal.groupBy({ by: ['status'], _count: { _all: true } }),
       this.prisma.listing.findMany({
@@ -50,7 +58,11 @@ export class AdminDashboardService {
       this.prisma.company.count({
         where: { deletedAt: null, verification: 'VERIFIED' },
       }),
-      this.prisma.user.groupBy({ by: ['status'], _count: { _all: true } }),
+      this.prisma.user.groupBy({
+        by: ['status'],
+        where: { deletedAt: null },
+        _count: { _all: true },
+      }),
       this.prisma.proposal.count(),
       this.prisma.deal.count({
         where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
@@ -151,22 +163,35 @@ export class AdminDashboardService {
   }
 
   async updateUserRole(
+    actorUserId: string,
     userId: string,
     platformRole: 'USER' | 'MODERATOR' | 'ADMIN',
   ) {
     try {
-      return await this.prisma.user.update({
-        where: { id: userId },
-        data: { platformRole },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          status: true,
-          platformRole: true,
-          emailVerifiedAt: true,
-          createdAt: true,
-        },
+      return await this.prisma.$transaction(async (transaction) => {
+        const user = await transaction.user.update({
+          where: { id: userId },
+          data: { platformRole },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            status: true,
+            platformRole: true,
+            emailVerifiedAt: true,
+            createdAt: true,
+          },
+        });
+        await transaction.auditLog.create({
+          data: {
+            actorUserId,
+            action: 'USER_PLATFORM_ROLE_UPDATED',
+            resourceType: 'USER',
+            resourceId: userId,
+            metadata: { platformRole },
+          },
+        });
+        return user;
       });
     } catch (error) {
       if (

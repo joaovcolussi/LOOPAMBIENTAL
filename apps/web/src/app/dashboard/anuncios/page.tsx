@@ -5,6 +5,7 @@ import { ArrowRight, Recycle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api, AuthUser, ListingCard } from '../../../lib/api';
 import { SessionActions } from '../../../components/session-actions';
+import { ListingCard as ListingCardView } from '../../../components/listing-card';
 
 const statusLabels: Record<string, string> = {
   DRAFT: 'Rascunho',
@@ -24,8 +25,12 @@ export default function ListingsDashboardPage() {
   const [listings, setListings] = useState<ListingCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [createdMessage, setCreatedMessage] = useState(false);
 
   useEffect(() => {
+    setCreatedMessage(
+      new URLSearchParams(window.location.search).get('created') === 'review',
+    );
     let active = true;
     api
       .me()
@@ -75,6 +80,12 @@ export default function ListingsDashboardPage() {
         <a className="button" href="/dashboard/anuncios/novo">
           Criar anúncio <ArrowRight size={15} />
         </a>
+        {createdMessage && (
+          <p className="success-panel" role="status">
+            Anúncio enviado para análise. Ele já aparece abaixo para sua empresa
+            e ficará público após a aprovação.
+          </p>
+        )}
         {error && <p className="form-error">{error}</p>}
         {listings.length === 0 ? (
           <div className="empty-panel" style={{ marginTop: 24 }}>
@@ -82,45 +93,21 @@ export default function ListingsDashboardPage() {
             <p>Crie seu primeiro anúncio para começar a negociar.</p>
           </div>
         ) : (
-          <div className="admin-users-table-wrap" style={{ marginTop: 24 }}>
-            <table className="admin-users-table">
-              <thead>
-                <tr>
-                  <th>Título</th>
-                  <th>Tipo</th>
-                  <th>Categoria</th>
-                  <th>Quantidade</th>
-                  <th>Preço</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {listings.map((listing) => (
-                  <tr key={listing.id}>
-                    <td>
-                      <strong>{listing.title}</strong>
-                    </td>
-                    <td>{listing.type === 'BUY' ? 'Compra' : 'Venda'}</td>
-                    <td>{listing.category.name}</td>
-                    <td>
-                      {listing.availableQuantity} {listing.unit}
-                    </td>
-                    <td>
-                      {listing.unitPrice
-                        ? `R$ ${Number(listing.unitPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                        : '—'}
-                    </td>
-                    <td>
-                      <span
-                        className={`admin-user-status ${listing.status.toLowerCase()}`}
-                      >
-                        {statusLabels[listing.status] ?? listing.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="listing-grid dashboard-listing-grid">
+            {listings.map((listing) => (
+              <div className="dashboard-listing-card" key={listing.id}>
+                <span
+                  className={`admin-user-status ${listing.status.toLowerCase()}`}
+                >
+                  {statusLabels[listing.status] ?? listing.status}
+                </span>
+                <ListingCardView
+                  listing={listing}
+                  showFavorite={false}
+                  ownerView
+                />
+              </div>
+            ))}
           </div>
         )}
       </section>

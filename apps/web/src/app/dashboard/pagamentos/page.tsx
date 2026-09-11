@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, Payment } from '../../../lib/api';
 import { SessionActions } from '../../../components/session-actions';
+import { formatMoney } from '../../../lib/format';
 
 const statusLabels: Record<string, string> = {
   INITIATED: 'Iniciado',
@@ -66,7 +67,8 @@ export default function PaymentsPage() {
                   </span>
                   <h2>{payment.deal.proposal.listing.title}</h2>
                   <p>
-                    {payment.currency} {payment.amount} · {payment.provider}
+                    {formatMoney(payment.amount, payment.currency)} ·{' '}
+                    {payment.provider}
                   </p>
                   <small>
                     {new Date(payment.createdAt).toLocaleString('pt-BR')}

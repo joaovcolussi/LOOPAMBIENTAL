@@ -1,4 +1,13 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  Query,
+  Req,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { ListingsService } from './listings.service';
@@ -30,9 +39,43 @@ export class ListingsController {
     };
   }
 
+  @Get('mine/:id')
+  @UseGuards(AuthGuard)
+  async findMineById(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return {
+      listing: await this.listingsService.findForUserById(request.user.id, id),
+    };
+  }
+
   @Get(':slug')
   async findOne(@Param('slug') slug: string): Promise<{ listing: unknown }> {
     return { listing: await this.listingsService.findPublishedBySlug(slug) };
+  }
+
+  @Get('media/:id')
+  @Header('Cache-Control', 'public, max-age=3600')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async media(@Param('id') id: string) {
+    const media = await this.listingsService.readPublishedMedia(id);
+    return new StreamableFile(media.buffer, { type: media.mimeType });
+  }
+
+  @Get('media/:id/owner')
+  @UseGuards(AuthGuard)
+  @Header('Cache-Control', 'private, max-age=300')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async ownedMedia(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    const media = await this.listingsService.readOwnedMedia(
+      request.user.id,
+      id,
+    );
+    return new StreamableFile(media.buffer, { type: media.mimeType });
   }
 
   @Get()
@@ -111,6 +154,11 @@ export class ListingsController {
           createdBy: { select: { id: true, name: true } },
           category: { select: { id: true, name: true, slug: true } },
           material: { select: { id: true, name: true, slug: true } },
+          media: {
+            where: { status: 'READY' },
+            orderBy: { sortOrder: 'asc' },
+            select: { id: true, altText: true, sortOrder: true },
+          },
         },
       }),
       this.prisma.listing.count({ where }),

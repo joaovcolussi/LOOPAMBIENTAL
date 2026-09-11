@@ -10,19 +10,20 @@ import {
 } from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { PaymentsService } from './payments.service';
+import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}
 
   @Get()
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, AuthenticatedMutationGuard)
   async list(@Req() request: AuthenticatedRequest): Promise<unknown> {
     return { payments: await this.payments.listForUser(request.user.id) };
   }
 
   @Post('checkout')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, AuthenticatedMutationGuard)
   checkout(
     @Req() request: AuthenticatedRequest,
     @Body() body: { dealId?: unknown },

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { CompaniesService } from './companies.service';
+import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 
 type CompanyBody = {
   legalName?: unknown;
@@ -30,7 +31,7 @@ type CompanyBody = {
 };
 
 @Controller('companies')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, AuthenticatedMutationGuard)
 export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
 

@@ -21,37 +21,90 @@ export class ConversationsService {
     const proposal = await this.prisma.proposal.findFirst({
       where: { id: proposalId },
       include: {
-        listing: { select: { id: true, createdByUserId: true } },
+        listing: {
+          select: { id: true, companyId: true, createdByUserId: true },
+        },
         deal: { select: { id: true } },
       },
     });
     if (!proposal) throw new NotFoundException('PROPOSAL_NOT_FOUND');
+    const membership = await this.prisma.companyMember.findFirst({
+      where: {
+        userId,
+        companyId: {
+          in: [proposal.proposerCompanyId, proposal.listing.companyId],
+        },
+      },
+      select: { role: true },
+    });
+    const isOriginalParticipant = [
+      proposal.createdByUserId,
+      proposal.listing.createdByUserId,
+    ].includes(userId);
+    if (!membership || (membership.role === 'MEMBER' && !isOriginalParticipant))
+      throw new ForbiddenException('CONVERSATION_ACCESS_DENIED');
     const participantIds = [
       proposal.createdByUserId,
       proposal.listing.createdByUserId,
+      userId,
     ].filter((id, index, ids) => ids.indexOf(id) === index);
-    if (!participantIds.includes(userId))
-      throw new ForbiddenException('CONVERSATION_ACCESS_DENIED');
     const existing = await this.prisma.conversation.findUnique({
       where: { proposalId },
       include: { participants: true },
     });
-    if (existing) return existing;
-    return this.prisma.conversation.create({
-      data: {
-        listingId: proposal.listing.id,
-        proposalId,
-        dealId: proposal.deal?.id,
-        participants: {
-          createMany: {
-            data: participantIds.map((participantId) => ({
-              userId: participantId,
-            })),
+    if (existing) {
+      await this.prisma.conversationParticipant.upsert({
+        where: {
+          conversationId_userId: { conversationId: existing.id, userId },
+        },
+        update: {},
+        create: { conversationId: existing.id, userId },
+      });
+      return this.prisma.conversation.findUnique({
+        where: { id: existing.id },
+        include: { participants: true },
+      });
+    }
+    try {
+      return await this.prisma.conversation.create({
+        data: {
+          listingId: proposal.listing.id,
+          proposalId,
+          dealId: proposal.deal?.id,
+          participants: {
+            createMany: {
+              data: participantIds.map((participantId) => ({
+                userId: participantId,
+              })),
+            },
           },
         },
-      },
-      include: { participants: true },
-    });
+        include: { participants: true },
+      });
+    } catch (error) {
+      if (
+        !error ||
+        typeof error !== 'object' ||
+        !('code' in error) ||
+        error.code !== 'P2002'
+      )
+        throw error;
+      const winner = await this.prisma.conversation.findUnique({
+        where: { proposalId },
+      });
+      if (!winner) throw error;
+      await this.prisma.conversationParticipant.upsert({
+        where: {
+          conversationId_userId: { conversationId: winner.id, userId },
+        },
+        update: {},
+        create: { conversationId: winner.id, userId },
+      });
+      return this.prisma.conversation.findUnique({
+        where: { id: winner.id },
+        include: { participants: true },
+      });
+    }
   }
 
   async list(userId: string): Promise<unknown> {
@@ -107,7 +160,17 @@ export class ConversationsService {
       throw new BadRequestException('INVALID_MESSAGE');
     const message = await this.prisma.message.create({
       data: { conversationId, senderUserId: userId, body: normalizedBody },
-      select: { id: true, body: true, createdAt: true, senderUserId: true },
+      select: {
+        id: true,
+        body: true,
+        createdAt: true,
+        senderUserId: true,
+        sender: { select: { id: true, name: true } },
+      },
+    });
+    await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { updatedAt: new Date() },
     });
     const recipients = await this.prisma.conversationParticipant.findMany({
       where: { conversationId, userId: { not: userId } },

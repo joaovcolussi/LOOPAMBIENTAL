@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../infrastructure/prisma.service';
+import { ListingMediaStorageService } from '../../infrastructure/listing-media-storage.service';
 
 export type ListingInput = {
   companyId: string;
@@ -56,6 +58,11 @@ const listingSelect = {
   createdBy: { select: { id: true, name: true } },
   category: { select: { id: true, name: true, slug: true } },
   material: { select: { id: true, name: true, slug: true } },
+  media: {
+    where: { status: 'READY' as const },
+    orderBy: { sortOrder: 'asc' as const },
+    select: { id: true, altText: true, sortOrder: true },
+  },
 } as const;
 
 const listingDetailSelect = {
@@ -83,7 +90,10 @@ const listingDetailSelect = {
 
 @Injectable()
 export class ListingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mediaStorage: ListingMediaStorageService,
+  ) {}
 
   async findForUser(userId: string): Promise<unknown> {
     const memberships = await this.prisma.companyMember.findMany({
@@ -96,6 +106,19 @@ export class ListingsService {
       where: { companyId: { in: companyIds }, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       select: listingSelect,
+    });
+  }
+
+  async findForUserById(userId: string, id: string): Promise<unknown> {
+    const listing = await this.getListing(id);
+    await this.assertCanManage(
+      userId,
+      listing.companyId,
+      listing.createdByUserId,
+    );
+    return this.prisma.listing.findUnique({
+      where: { id },
+      select: listingDetailSelect,
     });
   }
 
@@ -173,6 +196,125 @@ export class ListingsService {
     });
   }
 
+  async addMedia(
+    userId: string,
+    id: string,
+    files: Express.Multer.File[],
+  ): Promise<unknown> {
+    const listing = await this.getListing(id);
+    await this.assertCanManage(
+      userId,
+      listing.companyId,
+      listing.createdByUserId,
+    );
+    if (listing.status === 'CLOSED' || listing.status === 'ARCHIVED')
+      throw new BadRequestException('LISTING_NOT_EDITABLE');
+    if (files.length < 1) throw new BadRequestException('IMAGES_REQUIRED');
+    const existingCount = await this.prisma.listingMedia.count({
+      where: { listingId: id, status: 'READY' },
+    });
+    if (existingCount + files.length > 5)
+      throw new BadRequestException('IMAGE_LIMIT_EXCEEDED');
+
+    const uploads: {
+      storageKey: string;
+      mimeType: string;
+      sizeBytes: number;
+      sha256: string;
+    }[] = [];
+    try {
+      for (const file of files)
+        uploads.push(await this.mediaStorage.upload(file));
+
+      return await this.prisma.$transaction(async (transaction) => {
+        const media = await Promise.all(
+          uploads.map((upload, index) =>
+            transaction.listingMedia.create({
+              data: {
+                listingId: id,
+                uploadedByUserId: userId,
+                ...upload,
+                altText: listing.title,
+                sortOrder: existingCount + index,
+              },
+              select: { id: true, altText: true, sortOrder: true },
+            }),
+          ),
+        );
+        if (listing.status === 'PUBLISHED') {
+          await transaction.listing.update({
+            where: { id },
+            data: { status: 'PENDING_REVIEW', publishedAt: null },
+          });
+          await transaction.moderationCase.create({ data: { listingId: id } });
+        }
+        return media;
+      });
+    } catch (error) {
+      await Promise.all(
+        uploads.map((upload) => this.mediaStorage.remove(upload.storageKey)),
+      );
+      throw error;
+    }
+  }
+
+  async readPublishedMedia(mediaId: string) {
+    const media = await this.prisma.listingMedia.findFirst({
+      where: {
+        id: mediaId,
+        status: 'READY',
+        listing: { status: 'PUBLISHED', deletedAt: null },
+      },
+      select: { storageKey: true, mimeType: true },
+    });
+    if (!media) throw new NotFoundException('LISTING_MEDIA_NOT_FOUND');
+    return {
+      buffer: await this.mediaStorage.read(media.storageKey),
+      mimeType: media.mimeType,
+    };
+  }
+
+  async readOwnedMedia(userId: string, mediaId: string) {
+    const media = await this.prisma.listingMedia.findFirst({
+      where: { id: mediaId, status: 'READY' },
+      select: {
+        storageKey: true,
+        mimeType: true,
+        listing: {
+          select: { companyId: true, createdByUserId: true },
+        },
+      },
+    });
+    if (!media) throw new NotFoundException('LISTING_MEDIA_NOT_FOUND');
+    await this.assertCanManage(
+      userId,
+      media.listing.companyId,
+      media.listing.createdByUserId,
+    );
+    return {
+      buffer: await this.mediaStorage.read(media.storageKey),
+      mimeType: media.mimeType,
+    };
+  }
+
+  async readModerationMedia(mediaId: string) {
+    const media = await this.prisma.listingMedia.findFirst({
+      where: {
+        id: mediaId,
+        status: 'READY',
+        listing: {
+          moderationCases: { some: { status: { in: ['OPEN', 'IN_REVIEW'] } } },
+        },
+      },
+      select: { storageKey: true, mimeType: true },
+    });
+    if (!media) throw new NotFoundException('LISTING_MEDIA_NOT_FOUND');
+    return {
+      buffer: await this.mediaStorage.read(media.storageKey),
+      mimeType: media.mimeType,
+    };
+  }
+
   async update(
     userId: string,
     id: string,
@@ -197,59 +339,68 @@ export class ListingsService {
     const quantity = input.quantity
       ? this.parsePositiveDecimal(input.quantity, 'INVALID_QUANTITY')
       : undefined;
-    return this.prisma.listing.update({
-      where: { id },
-      data: {
-        ...(input.categoryId ? { categoryId: input.categoryId } : {}),
-        ...(input.materialId !== undefined
-          ? { materialId: input.materialId || null }
-          : {}),
-        ...(input.type ? { type: input.type } : {}),
-        ...(input.title
-          ? {
-              title: input.title,
-              slug: `${this.slugify(input.title)}-${randomUUID().slice(0, 8)}`,
-            }
-          : {}),
-        ...(input.description !== undefined
-          ? { description: input.description }
-          : {}),
-        ...(quantity ? { quantity, availableQuantity: quantity } : {}),
-        ...(input.unit ? { unit: input.unit } : {}),
-        ...(input.unitPrice !== undefined
-          ? {
-              unitPrice: input.unitPrice
-                ? this.parsePositiveDecimal(
-                    input.unitPrice,
-                    'INVALID_PRICE',
-                    2,
-                    12,
-                  )
-                : null,
-            }
-          : {}),
-        ...(input.frequency ? { frequency: input.frequency } : {}),
-        ...(input.riskClassification
-          ? { riskClassification: input.riskClassification }
-          : {}),
-        ...(input.originDetails !== undefined
-          ? { originDetails: input.originDetails }
-          : {}),
-        ...(input.ownTransport !== undefined
-          ? { ownTransport: input.ownTransport }
-          : {}),
-        ...(input.requiresDocuments !== undefined
-          ? { requiresDocuments: input.requiresDocuments }
-          : {}),
-        ...(input.city !== undefined ? { city: input.city } : {}),
-        ...(input.state !== undefined
-          ? { state: input.state.toUpperCase() }
-          : {}),
-        ...(listing.status === 'PUBLISHED'
-          ? { status: 'PENDING_REVIEW', publishedAt: null }
-          : {}),
-      },
-      select: listingSelect,
+    return this.prisma.$transaction(async (transaction) => {
+      const changed = await transaction.listing.updateMany({
+        where: { id, status: listing.status },
+        data: {
+          ...(input.categoryId ? { categoryId: input.categoryId } : {}),
+          ...(input.materialId !== undefined
+            ? { materialId: input.materialId || null }
+            : {}),
+          ...(input.type ? { type: input.type } : {}),
+          ...(input.title
+            ? {
+                title: input.title,
+                slug: `${this.slugify(input.title)}-${randomUUID().slice(0, 8)}`,
+              }
+            : {}),
+          ...(input.description !== undefined
+            ? { description: input.description }
+            : {}),
+          ...(quantity ? { quantity, availableQuantity: quantity } : {}),
+          ...(input.unit ? { unit: input.unit } : {}),
+          ...(input.unitPrice !== undefined
+            ? {
+                unitPrice: input.unitPrice
+                  ? this.parsePositiveDecimal(
+                      input.unitPrice,
+                      'INVALID_PRICE',
+                      2,
+                      12,
+                    )
+                  : null,
+              }
+            : {}),
+          ...(input.frequency ? { frequency: input.frequency } : {}),
+          ...(input.riskClassification
+            ? { riskClassification: input.riskClassification }
+            : {}),
+          ...(input.originDetails !== undefined
+            ? { originDetails: input.originDetails }
+            : {}),
+          ...(input.ownTransport !== undefined
+            ? { ownTransport: input.ownTransport }
+            : {}),
+          ...(input.requiresDocuments !== undefined
+            ? { requiresDocuments: input.requiresDocuments }
+            : {}),
+          ...(input.city !== undefined ? { city: input.city } : {}),
+          ...(input.state !== undefined
+            ? { state: input.state.toUpperCase() }
+            : {}),
+          ...(listing.status === 'PUBLISHED'
+            ? { status: 'PENDING_REVIEW', publishedAt: null }
+            : {}),
+        },
+      });
+      if (changed.count !== 1)
+        throw new ConflictException('LISTING_STATE_CHANGED');
+      if (listing.status === 'PUBLISHED')
+        await transaction.moderationCase.create({ data: { listingId: id } });
+      return transaction.listing.findUniqueOrThrow({
+        where: { id },
+        select: listingSelect,
+      });
     });
   }
 
@@ -263,13 +414,17 @@ export class ListingsService {
     if (!['DRAFT', 'REJECTED', 'PAUSED'].includes(listing.status))
       throw new BadRequestException('INVALID_LISTING_TRANSITION');
     return this.prisma.$transaction(async (transaction) => {
-      const updatedListing = await transaction.listing.update({
-        where: { id },
+      const changed = await transaction.listing.updateMany({
+        where: { id, status: listing.status },
         data: { status: 'PENDING_REVIEW' },
+      });
+      if (changed.count !== 1)
+        throw new ConflictException('LISTING_STATE_CHANGED');
+      await transaction.moderationCase.create({ data: { listingId: id } });
+      return transaction.listing.findUniqueOrThrow({
+        where: { id },
         select: listingSelect,
       });
-      await transaction.moderationCase.create({ data: { listingId: id } });
-      return updatedListing;
     });
   }
 

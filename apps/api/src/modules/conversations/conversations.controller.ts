@@ -10,9 +10,10 @@ import {
 } from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { ConversationsService } from './conversations.service';
+import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 
 @Controller('conversations')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, AuthenticatedMutationGuard)
 export class ConversationsController {
   constructor(private readonly conversationsService: ConversationsService) {}
   @Get()

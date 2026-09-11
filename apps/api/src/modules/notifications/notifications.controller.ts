@@ -1,9 +1,10 @@
 import { Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 import { NotificationsService } from './notifications.service';
 
 @Controller('notifications')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, AuthenticatedMutationGuard)
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
   @Get()

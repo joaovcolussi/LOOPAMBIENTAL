@@ -147,6 +147,13 @@ enum RiskClassification {
   @@map("risk_classification")
 }
 
+enum ListingMediaStatus {
+  READY
+  REJECTED
+
+  @@map("listing_media_status")
+}
+
 enum ContactVisibility {
   PRIVATE
   MEMBERS
@@ -210,6 +217,9 @@ model User {
   authTokens               AuthToken[]
   logisticsRequests        LogisticsRequest[]
   logisticsQuotes          LogisticsQuote[]
+  listingMedia             ListingMedia[]
+  carouselSlidesUpdated    HomeCarouselSlide[] @relation("carousel_slide_updater")
+  auditLogs                AuditLog[]
 
   @@index([status])
   @@index([platformRole])
@@ -348,12 +358,68 @@ model Listing {
   proposals          Proposal[]
   deals              Deal[]
   conversations      Conversation[]     @relation("listing_conversations")
+  media              ListingMedia[]
 
   @@index([status, type, publishedAt(sort: Desc)])
   @@index([categoryId, status])
   @@index([companyId, status])
   @@index([city, state, status])
   @@map("listings")
+}
+
+model ListingMedia {
+  id               String             @id @default(uuid()) @db.VarChar(36)
+  listingId        String             @map("listing_id") @db.VarChar(36)
+  uploadedByUserId String             @map("uploaded_by_user_id") @db.VarChar(36)
+  storageKey       String             @unique @map("storage_key") @db.VarChar(255)
+  mimeType         String             @map("mime_type") @db.VarChar(80)
+  sizeBytes        Int                @map("size_bytes")
+  sha256           String             @db.Char(64)
+  altText          String?            @map("alt_text") @db.VarChar(180)
+  sortOrder        Int                @default(0) @map("sort_order")
+  status           ListingMediaStatus @default(READY)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+  listing          Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  uploadedBy       User               @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([listingId, status, sortOrder])
+  @@unique([listingId, sortOrder])
+  @@index([uploadedByUserId])
+  @@map("listing_media")
+}
+
+model HomeCarouselSlide {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  position        Int      @unique
+  storageKey      String   @unique @map("storage_key") @db.VarChar(255)
+  mimeType        String   @map("mime_type") @db.VarChar(80)
+  sizeBytes       Int      @map("size_bytes")
+  sha256          String   @db.Char(64)
+  altText         String   @map("alt_text") @db.VarChar(180)
+  version         Int      @default(1)
+  updatedByUserId String   @map("updated_by_user_id") @db.VarChar(36)
+  createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedBy       User     @relation("carousel_slide_updater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([updatedByUserId])
+  @@map("home_carousel_slides")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  actorUserId  String?  @map("actor_user_id") @db.VarChar(36)
+  action       String   @db.VarChar(80)
+  resourceType String   @map("resource_type") @db.VarChar(80)
+  resourceId   String?  @map("resource_id") @db.VarChar(36)
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  actor        User?    @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([resourceType, resourceId, createdAt(sort: Desc)])
+  @@index([actorUserId, createdAt(sort: Desc)])
+  @@map("audit_logs")
 }
 
 model ModerationCase {

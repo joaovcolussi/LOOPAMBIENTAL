@@ -13,6 +13,7 @@ import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { AuthGuard } from '../auth/auth.guard';
 import { AdminDashboardService } from './admin-dashboard.service';
+import { AdminMutationGuard } from '../auth/admin-mutation.guard';
 
 @Controller('admin/dashboard')
 @UseGuards(AuthGuard, AdminGuard)
@@ -31,6 +32,7 @@ export class AdminDashboardController {
   }
 
   @Patch('users/:id/role')
+  @UseGuards(AdminMutationGuard)
   async updateRole(
     @Param('id') id: string,
     @Body() body: unknown,
@@ -47,7 +49,7 @@ export class AdminDashboardController {
     if (id === request.user.id && role !== 'ADMIN') {
       throw new BadRequestException('CANNOT_REMOVE_OWN_ADMIN_ACCESS');
     }
-    return this.dashboard.updateUserRole(id, role);
+    return this.dashboard.updateUserRole(request.user.id, id, role);
   }
 
   private assertPlatformAdmin(request: AuthenticatedRequest) {

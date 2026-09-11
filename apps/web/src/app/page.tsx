@@ -3,13 +3,15 @@ import {
   CheckCircle2,
   Factory,
   Leaf,
-  MapPin,
   Recycle,
   Search,
   Truck,
 } from 'lucide-react';
 import { SessionActions } from '../components/session-actions';
 import { ListingCard } from '../lib/api';
+import { ListingCard as ListingCardView } from '../components/listing-card';
+import { RecyclingCarousel } from '../components/recycling-carousel';
+import { HomeCarouselSlide } from '../lib/api';
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
@@ -42,9 +44,10 @@ async function fetchJson<T>(path: string): Promise<T | null> {
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
-  const [statsResult, listingsResult] = await Promise.all([
+  const [statsResult, listingsResult, carouselResult] = await Promise.all([
     fetchJson<PublicStats>('/stats'),
     fetchJson<{ data: ListingCard[] }>('/listings?pageSize=6'),
+    fetchJson<{ slides: HomeCarouselSlide[] }>('/home-carousel/slides'),
   ]);
 
   const stats = statsResult ?? {
@@ -60,11 +63,6 @@ export default async function HomePage() {
     ...stats.demandByCategory.map((item) => item.listings),
     1,
   );
-
-  const formatQuantity = (listing: ListingCard) => {
-    const value = Number(listing.availableQuantity).toLocaleString('pt-BR');
-    return `${value} ${listing.unit} disponíveis`;
-  };
 
   return (
     <main>
@@ -106,27 +104,8 @@ export default async function HomePage() {
             <CheckCircle2 size={17} /> Empresas e operações verificadas
           </div>
         </div>
-        <div
-          className="hero-art"
-          aria-label="Ilustração de materiais circulares"
-        >
-          <div className="orbit orbit-one" />
-          <div className="orbit orbit-two" />
-          <div className="material-card card-main">
-            <span className="card-label">EM DESTAQUE</span>
-            <strong>Resíduo PET cristal</strong>
-            <span>
-              2,4 toneladas <i>•</i> Guarulhos, SP
-            </span>
-            <b>
-              R$ 4,80 <small>/ kg</small>
-            </b>
-          </div>
-          <div className="material-card card-float">
-            <Recycle size={18} />
-            <strong>ciclo industrial ativo</strong>
-            <span>+ {stats.totalListings} operações</span>
-          </div>
+        <div className="hero-art">
+          <RecyclingCarousel customSlides={carouselResult?.slides ?? []} />
         </div>
       </section>
 
@@ -269,58 +248,11 @@ export default async function HomePage() {
             <p className="empty-state">Ainda não há anúncios publicados.</p>
           ) : (
             listings.map((listing) => (
-              <article className="listing" key={listing.id}>
-                <div
-                  className={`listing-image ${
-                    listing.type === 'BUY' ? 'blue' : 'mint'
-                  }`}
-                >
-                  <span
-                    className={`listing-type ${listing.type.toLowerCase()}`}
-                  >
-                    {listing.type === 'BUY' ? 'COMPRA' : 'VENDA'}
-                  </span>
-                </div>
-                <div className="listing-body">
-                  <div className="listing-meta">
-                    <span>
-                      {listing.company.tradeName || listing.company.legalName}
-                    </span>
-                    {listing.company.verification === 'VERIFIED' && (
-                      <span className="verified">verificada</span>
-                    )}
-                  </div>
-                  <h3>
-                    <a
-                      className="listing-title-link"
-                      href={`/anuncios/${listing.slug}`}
-                    >
-                      {listing.title}
-                    </a>
-                  </h3>
-                  <div className="listing-detail">
-                    <span>{formatQuantity(listing)}</span>
-                    <span>
-                      <MapPin size={14} />
-                      {listing.city ? `${listing.city}, ${listing.state}` : '—'}
-                    </span>
-                  </div>
-                  <div className="listing-footer">
-                    <strong>
-                      {listing.unitPrice
-                        ? `R$ ${Number(listing.unitPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / ${listing.unit}`
-                        : 'Preço sob consulta'}
-                    </strong>
-                    <a
-                      className="listing-arrow"
-                      href={`/anuncios/${listing.slug}`}
-                      aria-label={`Ver ${listing.title}`}
-                    >
-                      <ArrowRight size={17} />
-                    </a>
-                  </div>
-                </div>
-              </article>
+              <ListingCardView
+                key={listing.id}
+                listing={listing}
+                showFavorite={false}
+              />
             ))
           )}
         </div>

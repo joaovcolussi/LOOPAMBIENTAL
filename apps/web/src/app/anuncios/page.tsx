@@ -1,23 +1,10 @@
 'use client';
 
-import { ArrowRight, BadgeCheck, MapPin, Recycle, Search } from 'lucide-react';
+import { Recycle, Search } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { SessionActions } from '../../components/session-actions';
-import { FavoriteButton } from '../../components/favorite-button';
+import { ListingCard as ListingCardView } from '../../components/listing-card';
 import { api, ListingCard } from '../../lib/api';
-
-const frequencyLabels: Record<string, string> = {
-  ONE_TIME: 'operação única',
-  WEEKLY: 'semanal',
-  MONTHLY: 'mensal',
-  CONTINUOUS: 'contínuo',
-};
-
-const categoryImages: Record<string, string> = {
-  plastico: '/products/pet.svg',
-  metais: '/products/aluminio.svg',
-  'papel-papelao': '/products/papelao.svg',
-};
 
 export default function ListingsPage() {
   const [listings, setListings] = useState<ListingCard[]>([]);
@@ -198,83 +185,5 @@ export default function ListingsPage() {
         )}
       </section>
     </main>
-  );
-}
-
-function ListingCardView({
-  listing,
-  initialFavorite,
-}: {
-  listing: ListingCard;
-  initialFavorite: boolean;
-}) {
-  const price = listing.unitPrice
-    ? new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: listing.currency,
-      }).format(Number(listing.unitPrice))
-    : 'A combinar';
-  const company = listing.company.tradeName || listing.company.legalName;
-  return (
-    <article className="listing">
-      <div
-        className={`listing-image ${listing.type === 'BUY' ? 'sand' : 'mint'}`}
-      >
-        <img
-          src={categoryImages[listing.category.slug] || '/products/pet.svg'}
-          alt={`Ilustração de ${listing.material?.name || listing.title}`}
-          loading="lazy"
-        />
-        <span
-          className={`listing-type ${listing.type === 'BUY' ? 'compra' : 'venda'}`}
-        >
-          {listing.type === 'BUY' ? 'COMPRA' : 'VENDA'}
-        </span>
-      </div>
-      <div className="listing-body">
-        <div className="listing-meta">
-          <span>{company}</span>
-          {listing.company.verification === 'VERIFIED' && (
-            <span className="verified">
-              <BadgeCheck size={13} /> verificada
-            </span>
-          )}
-        </div>
-        <p className="listing-publisher">
-          Oportunidade publicada por {listing.createdBy.name}
-        </p>
-        <h2>
-          <a className="listing-title-link" href={`/anuncios/${listing.slug}`}>
-            {listing.title}
-          </a>
-        </h2>
-        <div className="listing-detail">
-          <span>
-            {listing.availableQuantity} {listing.unit} disponíveis
-          </span>
-          <span>
-            <MapPin size={14} /> {listing.city || 'Localização não informada'}
-            {listing.state ? `, ${listing.state}` : ''}
-          </span>
-        </div>
-        <div className="listing-card-price">
-          <strong>{price}</strong>
-          <span>{frequencyLabels[listing.frequency] || listing.frequency}</span>
-        </div>
-        <div className="listing-footer">
-          <span>{listing.material?.name || listing.category.name}</span>
-          <div className="listing-actions">
-            <FavoriteButton
-              listingId={listing.id}
-              listingSlug={listing.slug}
-              initialFavorite={initialFavorite}
-            />
-            <a className="interest-link" href={`/anuncios/${listing.slug}`}>
-              Ver detalhes <ArrowRight size={15} />
-            </a>
-          </div>
-        </div>
-      </div>
-    </article>
   );
 }

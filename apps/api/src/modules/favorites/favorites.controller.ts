@@ -9,9 +9,10 @@ import {
 } from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FavoritesService } from './favorites.service';
+import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 
 @Controller()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, AuthenticatedMutationGuard)
 export class FavoritesController {
   constructor(private readonly favoritesService: FavoritesService) {}
   @Get('favorites')

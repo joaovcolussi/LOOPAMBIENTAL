@@ -6,10 +6,14 @@ import {
   Patch,
   Post,
   Req,
+  UploadedFiles,
+  UseInterceptors,
   UseGuards,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { ListingInput, ListingsService } from './listings.service';
+import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 
 type ListingBody = {
   companyId?: unknown;
@@ -31,7 +35,7 @@ type ListingBody = {
 };
 
 @Controller('listings')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, AuthenticatedMutationGuard)
 export class ListingsCommandController {
   constructor(private readonly listingsService: ListingsService) {}
 
@@ -54,6 +58,23 @@ export class ListingsCommandController {
       listing: await this.listingsService.create(
         request.user.id,
         input as ListingInput,
+      ),
+    };
+  }
+  @Post(':id/media')
+  @UseInterceptors(
+    FilesInterceptor('photos', 5, { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  async addMedia(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ): Promise<unknown> {
+    return {
+      media: await this.listingsService.addMedia(
+        request.user.id,
+        id,
+        files ?? [],
       ),
     };
   }

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { ProposalsService } from './proposals.service';
+import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 
 type ProposalBody = {
   listingId?: unknown;
@@ -21,7 +22,7 @@ type ProposalBody = {
 };
 
 @Controller('proposals')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, AuthenticatedMutationGuard)
 export class ProposalsController {
   constructor(private readonly proposalsService: ProposalsService) {}
   @Get()

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -132,16 +133,22 @@ export class ProposalsService {
   ): Promise<unknown> {
     const proposal = await this.getProposal(id);
     await this.assertListingManager(userId, proposal.listing.companyId);
-    if (proposal.status !== 'PENDING' && proposal.status !== 'COUNTERED')
+    await this.expireIfNeeded(proposal);
+    if (proposal.status !== 'PENDING')
       throw new BadRequestException('INVALID_PROPOSAL_TRANSITION');
     const quantity = this.decimal(input.quantity, 'INVALID_QUANTITY');
     const unitPrice = this.decimal(input.unitPrice, 'INVALID_PRICE');
     const result = await this.prisma.$transaction(async (transaction) => {
-      const updated = await transaction.proposal.update({
-        where: { id },
+      const changed = await transaction.proposal.updateMany({
+        where: {
+          id,
+          status: 'PENDING',
+          OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
+        },
         data: { status: 'COUNTERED', quantity, unitPrice, notes: input.notes },
-        select: proposalSelect,
       });
+      if (changed.count !== 1)
+        throw new BadRequestException('INVALID_PROPOSAL_TRANSITION');
       await transaction.proposalRevision.create({
         data: {
           proposalId: id,
@@ -151,7 +158,10 @@ export class ProposalsService {
           notes: input.notes,
         },
       });
-      return updated;
+      return transaction.proposal.findUnique({
+        where: { id },
+        select: proposalSelect,
+      });
     });
     await this.notifications.create(proposal.createdByUserId, {
       type: 'PROPOSAL_COUNTERED',
@@ -164,14 +174,32 @@ export class ProposalsService {
 
   async accept(userId: string, id: string): Promise<unknown> {
     const proposal = await this.getProposal(id);
-    await this.assertListingManager(userId, proposal.listing.companyId);
+    await this.assertParticipant(
+      userId,
+      proposal.proposerCompanyId,
+      proposal.listing.companyId,
+    );
     const existingDeal = await this.prisma.deal.findUnique({
       where: { proposalId: id },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        listingId: true,
+        proposalId: true,
+        createdAt: true,
+      },
     });
     if (existingDeal) return existingDeal;
-    if (proposal.status !== 'PENDING' && proposal.status !== 'COUNTERED')
-      throw new BadRequestException('INVALID_PROPOSAL_TRANSITION');
+    if (proposal.status === 'PENDING')
+      await this.assertListingManager(userId, proposal.listing.companyId);
+    else if (proposal.status === 'COUNTERED')
+      await this.assertProposalManager(
+        userId,
+        proposal.proposerCompanyId,
+        proposal.createdByUserId,
+      );
+    else throw new BadRequestException('INVALID_PROPOSAL_TRANSITION');
+    await this.expireIfNeeded(proposal);
     const buyerCompanyId =
       proposal.listing.type === 'SELL'
         ? proposal.proposerCompanyId
@@ -182,14 +210,27 @@ export class ProposalsService {
         : proposal.proposerCompanyId;
     const deal = await this.prisma.$transaction(async (transaction) => {
       const changed = await transaction.proposal.updateMany({
-        where: { id, status: { in: ['PENDING', 'COUNTERED'] } },
+        where: {
+          id,
+          status: proposal.status,
+          OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
+        },
         data: { status: 'ACCEPTED' },
       });
       if (changed.count === 0) return null;
-      await transaction.listing.update({
-        where: { id: proposal.listingId },
-        data: { status: 'NEGOTIATING' },
+      const reserved = await transaction.listing.updateMany({
+        where: {
+          id: proposal.listingId,
+          status: 'PUBLISHED',
+          availableQuantity: { gte: proposal.quantity },
+        },
+        data: {
+          status: 'NEGOTIATING',
+          availableQuantity: { decrement: proposal.quantity },
+        },
       });
+      if (reserved.count !== 1)
+        throw new ConflictException('LISTING_NO_LONGER_AVAILABLE');
       return transaction.deal.create({
         data: {
           listingId: proposal.listingId,
@@ -209,66 +250,107 @@ export class ProposalsService {
     if (!deal) {
       const concurrentDeal = await this.prisma.deal.findUnique({
         where: { proposalId: id },
-        select: { id: true, status: true },
+        select: {
+          id: true,
+          status: true,
+          listingId: true,
+          proposalId: true,
+          createdAt: true,
+        },
       });
       if (concurrentDeal) return concurrentDeal;
       throw new BadRequestException('INVALID_PROPOSAL_TRANSITION');
     }
-    await this.notifications.create(proposal.createdByUserId, {
-      type: 'PROPOSAL_ACCEPTED',
-      title: 'Proposta aceita',
-      body: 'Sua proposta foi aceita e uma negociação foi criada.',
-      payload: { proposalId: id, dealId: deal.id },
-    });
+    await this.notifications.create(
+      proposal.status === 'COUNTERED'
+        ? proposal.listing.createdByUserId
+        : proposal.createdByUserId,
+      {
+        type: 'PROPOSAL_ACCEPTED',
+        title: 'Proposta aceita',
+        body: 'A proposta foi aceita e uma negociação foi criada.',
+        payload: { proposalId: id, dealId: deal.id },
+      },
+    );
     return deal;
   }
 
   async reject(userId: string, id: string): Promise<unknown> {
-    return this.changeStatus(userId, id, 'REJECTED');
+    const proposal = await this.getProposal(id);
+    if (proposal.status === 'PENDING')
+      await this.assertListingManager(userId, proposal.listing.companyId);
+    else if (proposal.status === 'COUNTERED')
+      await this.assertProposalManager(
+        userId,
+        proposal.proposerCompanyId,
+        proposal.createdByUserId,
+      );
+    else throw new BadRequestException('INVALID_PROPOSAL_TRANSITION');
+    await this.expireIfNeeded(proposal);
+    return this.changeStatus(id, 'REJECTED', proposal.status);
   }
   async cancel(userId: string, id: string): Promise<unknown> {
-    return this.changeStatus(userId, id, 'CANCELLED');
+    const proposal = await this.getProposal(id);
+    await this.assertProposalManager(
+      userId,
+      proposal.proposerCompanyId,
+      proposal.createdByUserId,
+    );
+    if (proposal.status !== 'PENDING')
+      throw new BadRequestException('INVALID_PROPOSAL_TRANSITION');
+    await this.expireIfNeeded(proposal);
+    return this.changeStatus(id, 'CANCELLED', 'PENDING');
   }
 
   private async changeStatus(
-    userId: string,
     id: string,
     status: 'REJECTED' | 'CANCELLED',
+    currentStatus: 'PENDING' | 'COUNTERED',
   ) {
     const proposal = await this.getProposal(id);
-    await this.assertParticipant(
-      userId,
-      proposal.proposerCompanyId,
-      proposal.listing.companyId,
+    const result = await this.prisma.$transaction(async (transaction) => {
+      const changed = await transaction.proposal.updateMany({
+        where: {
+          id,
+          status: currentStatus,
+          OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
+        },
+        data: { status },
+      });
+      if (changed.count !== 1)
+        throw new BadRequestException('INVALID_PROPOSAL_TRANSITION');
+      return transaction.proposal.findUnique({
+        where: { id },
+        select: proposalSelect,
+      });
+    });
+    await this.notifications.create(
+      status === 'CANCELLED' || currentStatus === 'COUNTERED'
+        ? proposal.listing.createdByUserId
+        : proposal.createdByUserId,
+      {
+        type:
+          status === 'REJECTED' ? 'PROPOSAL_REJECTED' : 'PROPOSAL_CANCELLED',
+        title:
+          status === 'REJECTED' ? 'Proposta rejeitada' : 'Proposta cancelada',
+        body:
+          status === 'REJECTED'
+            ? 'Uma proposta foi rejeitada.'
+            : 'Uma proposta foi cancelada.',
+        payload: { proposalId: id },
+      },
     );
-    if (
-      proposal.status === 'ACCEPTED' ||
-      proposal.status === 'REJECTED' ||
-      proposal.status === 'CANCELLED'
-    )
-      throw new BadRequestException('INVALID_PROPOSAL_TRANSITION');
-    const result = await this.prisma.proposal.update({
-      where: { id },
-      data: { status },
-      select: proposalSelect,
-    });
-    await this.notifications.create(proposal.createdByUserId, {
-      type: status === 'REJECTED' ? 'PROPOSAL_REJECTED' : 'PROPOSAL_CANCELLED',
-      title:
-        status === 'REJECTED' ? 'Proposta rejeitada' : 'Proposta cancelada',
-      body:
-        status === 'REJECTED'
-          ? 'Uma proposta foi rejeitada.'
-          : 'Uma proposta foi cancelada.',
-      payload: { proposalId: id },
-    });
     return result;
   }
 
   private async getProposal(id: string) {
     const proposal = await this.prisma.proposal.findFirst({
       where: { id },
-      include: { listing: { select: { companyId: true, type: true } } },
+      include: {
+        listing: {
+          select: { companyId: true, type: true, createdByUserId: true },
+        },
+      },
     });
     if (!proposal) throw new NotFoundException('PROPOSAL_NOT_FOUND');
     return proposal;
@@ -289,6 +371,17 @@ export class ProposalsService {
     )
       throw new ForbiddenException('COMPANY_MANAGEMENT_REQUIRED');
   }
+  private async assertProposalManager(
+    userId: string,
+    companyId: string,
+    creatorId: string,
+  ) {
+    const membership = await this.prisma.companyMember.findUnique({
+      where: { companyId_userId: { companyId, userId } },
+    });
+    if (!membership || (membership.role === 'MEMBER' && creatorId !== userId))
+      throw new ForbiddenException('PROPOSAL_MANAGEMENT_REQUIRED');
+  }
   private async assertParticipant(
     userId: string,
     proposerCompanyId: string,
@@ -303,6 +396,26 @@ export class ProposalsService {
     });
     if (memberships.length === 0)
       throw new ForbiddenException('PROPOSAL_ACCESS_DENIED');
+  }
+  private async expireIfNeeded(proposal: {
+    id: string;
+    status: string;
+    validUntil: Date | null;
+  }) {
+    if (
+      proposal.validUntil &&
+      proposal.validUntil.getTime() <= Date.now() &&
+      (proposal.status === 'PENDING' || proposal.status === 'COUNTERED')
+    ) {
+      await this.prisma.proposal.updateMany({
+        where: {
+          id: proposal.id,
+          status: proposal.status as 'PENDING' | 'COUNTERED',
+        },
+        data: { status: 'EXPIRED' },
+      });
+      throw new BadRequestException('PROPOSAL_EXPIRED');
+    }
   }
   private decimal(value: string, code: string) {
     const scale = code === 'INVALID_PRICE' ? 2 : 3;
@@ -322,7 +435,7 @@ export class ProposalsService {
   private parseDate(value?: string) {
     if (!value) return undefined;
     const date = new Date(value);
-    if (Number.isNaN(date.getTime()))
+    if (Number.isNaN(date.getTime()) || date.getTime() <= Date.now())
       throw new BadRequestException('INVALID_VALID_UNTIL');
     return date;
   }

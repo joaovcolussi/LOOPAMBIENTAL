@@ -79,22 +79,16 @@ export default function DashboardPage() {
           </article>
           <article>
             <span className="dashboard-number">04</span>
-            <h2>Negocie propostas</h2>
-            <p>Veja as oportunidades comerciais da sua empresa.</p>
+            <h2>Negocie propostas e converse</h2>
+            <p>
+              Veja propostas e alinhe as condições com parceiros na mesma tela.
+            </p>
             <a href="/dashboard/propostas">
               Ver propostas <ArrowRight size={15} />
             </a>
           </article>
           <article>
             <span className="dashboard-number">05</span>
-            <h2>Converse com parceiros</h2>
-            <p>Troque mensagens dentro da plataforma.</p>
-            <a href="/dashboard/mensagens">
-              Abrir mensagens <ArrowRight size={15} />
-            </a>
-          </article>
-          <article>
-            <span className="dashboard-number">06</span>
             <h2>Acompanhe atualizações</h2>
             <p>Receba avisos sobre propostas e mensagens.</p>
             <a href="/dashboard/notificacoes">
@@ -102,7 +96,7 @@ export default function DashboardPage() {
             </a>
           </article>
           <article>
-            <span className="dashboard-number">07</span>
+            <span className="dashboard-number">06</span>
             <h2>Pagamentos</h2>
             <p>Acompanhe checkouts e pagamentos das negociações.</p>
             <a href="/dashboard/pagamentos">
@@ -110,7 +104,7 @@ export default function DashboardPage() {
             </a>
           </article>
           <article>
-            <span className="dashboard-number">08</span>
+            <span className="dashboard-number">07</span>
             <h2>Logística</h2>
             <p>Solicite transporte e compare cotações manuais.</p>
             <a href="/dashboard/logistica">

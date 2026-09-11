@@ -11,6 +11,9 @@ sucatas e materiais reaproveitáveis.
 - Busca, filtros, favoritos e paginação.
 - Propostas, contrapropostas, negociações e mensagens.
 - Notificações, moderação, pagamentos e solicitações logísticas.
+- Painel administrativo com indicadores, permissões, moderação e gestão do
+  carrossel da página inicial.
+- Fotos privadas de anúncios e imagens administrativas armazenadas em MinIO.
 - API NestJS, frontend Next.js, worker e banco MySQL com Prisma.
 
 Pagamentos Mercado Pago e envio de e-mail real dependem de credenciais externas.
@@ -123,6 +126,13 @@ corepack pnpm --filter @loopambiental/database db:demo
 Esses comandos usam `localhost` no host. Dentro dos containers, a API usa o
 hostname interno `mysql`, já configurado no Compose.
 
+O diretório `packages/database/prisma/migrations` contém a linha de base para
+novos ambientes. Bancos locais criados anteriormente com `db:push` devem
+continuar usando `db:push`; antes de adotar `prisma migrate deploy` em um banco
+existente, registre a linha de base com `prisma migrate resolve --applied
+20260902000000_baseline` após validar que o schema está sincronizado e execute
+`prisma migrate deploy` para aplicar as migrações incrementais seguintes.
+
 ### Endereços
 
 | Serviço       | Endereço                              |
@@ -132,6 +142,26 @@ hostname interno `mysql`, já configurado no Compose.
 | Healthcheck   | `http://localhost:3001/api/v1/health` |
 | Mailpit       | `http://localhost:8025`               |
 | MinIO Console | `http://localhost:9001`               |
+
+### Administração
+
+O painel administrativo fica em `http://localhost:3000/admin` e reúne:
+
+- indicadores de usuários, empresas, anúncios, propostas e negociações;
+- volume comercial, pipeline e estimativa de comissão;
+- distribuição por status e categoria;
+- gestão dos 100 usuários mais recentes e seus papéis de plataforma;
+- fila de moderação em `/admin/moderacao`;
+- substituição das quatro imagens do carrossel em `/admin/carrossel`.
+
+Somente administradores podem alterar papéis e o carrossel. Administradores e
+moderadores podem decidir casos de moderação. Todas essas mutações exigem sessão,
+origem válida e são registradas na tabela `audit_logs` quando aplicável.
+
+As posições sem imagem personalizada usam as ilustrações incluídas no frontend.
+Imagens enviadas são limitadas a 5 MB, decodificadas e convertidas para WebP
+antes da publicação. O bucket permanece privado e a API entrega somente o
+conteúdo permitido.
 
 ### Parar e limpar
 
@@ -201,10 +231,24 @@ SMTP_HOST="localhost"
 SMTP_PORT=1025
 WEB_PUBLIC_URL="http://localhost:3000"
 FIELD_ENCRYPTION_KEY="configure-a-strong-secret-in-production"
+STORAGE_ENDPOINT="http://localhost:9000"
+STORAGE_BUCKET="loopambiental-listings"
+STORAGE_ACCESS_KEY="loopambiental"
+STORAGE_SECRET_KEY="loopambiental_local"
 ```
 
 Para habilitar checkout Mercado Pago, configure também `MP_ACCESS_TOKEN`,
 `MP_WEBHOOK_SECRET` e `MP_API_URL`.
+
+As fotos de anúncios são armazenadas no MinIO local. A API aceita até cinco
+imagens JPEG, PNG ou WebP de 5 MB, decodifica e converte o conteúdo para WebP e
+mantém os objetos privados. Somente fotos de anúncios publicados têm leitura
+pública; prévias e moderação exigem sessão autorizada.
+
+No fluxo inicial de negociação, a empresa anunciante pode enviar uma
+contraproposta e a empresa proponente pode aceitá-la ou rejeitá-la. Rodadas
+alternadas adicionais ficam fora deste primeiro fluxo para manter explícita a
+parte responsável pela próxima decisão.
 
 ## Comandos de validação
 
@@ -271,7 +315,6 @@ schema.sql        Provisionamento manual MySQL
 
 ## Pendências antes de produção
 
-- Migrations Prisma versionadas.
 - Worker BullMQ real.
 - Rate limiting e observabilidade completos.
 - Upload seguro com scanner.

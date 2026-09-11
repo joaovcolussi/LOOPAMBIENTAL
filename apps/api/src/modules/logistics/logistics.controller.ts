@@ -10,10 +10,11 @@ import {
 } from '@nestjs/common';
 import { AdminGuard } from '../auth/admin.guard';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 import { LogisticsService } from './logistics.service';
 
 @Controller('logistics')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, AuthenticatedMutationGuard)
 export class LogisticsController {
   constructor(private readonly logistics: LogisticsService) {}
 

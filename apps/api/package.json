@@ -2,20 +2,22 @@
   "name": "@loopambiental/api",
   "private": true,
   "scripts": {
-    "dev": "nest start --watch --env-file ../../.env",
+    "dev": "nest start --watch --entryFile apps/api/src/main --env-file ../../.env",
     "build": "nest build",
     "lint": "prettier --check \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1125.0",
     "@loopambiental/database": "workspace:*",
     "@nestjs/common": "^11.0.11",
     "@nestjs/core": "^11.0.11",
     "@nestjs/platform-express": "^11.0.11",
-    "reflect-metadata": "^0.2.2",
     "nodemailer": "^6.10.0",
-    "rxjs": "^7.8.1"
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.5",
@@ -23,6 +25,7 @@
     "@nestjs/testing": "^11.0.11",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
+    "@types/multer": "^2.2.0",
     "@types/nodemailer": "^6.4.16",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",

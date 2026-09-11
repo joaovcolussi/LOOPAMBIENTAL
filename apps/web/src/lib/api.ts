@@ -16,10 +16,19 @@ export function isAuthenticationError(error: unknown) {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
+    const method = init?.method?.toUpperCase() ?? 'GET';
     response = await fetch(`${API_URL}${path}`, {
       ...init,
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      headers: {
+        ...(init?.body instanceof FormData
+          ? {}
+          : { 'Content-Type': 'application/json' }),
+        ...(method === 'GET' || method === 'HEAD'
+          ? {}
+          : { 'X-App-Action': '1' }),
+        ...init?.headers,
+      },
     });
   } catch {
     throw new Error('API_UNAVAILABLE');
@@ -116,6 +125,12 @@ export type ListingDetail = {
     } | null;
   };
   createdBy: { id: string; name: string };
+  media: ListingMedia[];
+};
+export type ListingMedia = {
+  id: string;
+  altText: string | null;
+  sortOrder: number;
 };
 export type ListingCard = {
   id: string;
@@ -146,6 +161,7 @@ export type ListingCard = {
   createdBy: { id: string; name: string };
   category: { id: string; name: string; slug: string };
   material: { id: string; name: string; slug: string } | null;
+  media: ListingMedia[];
 };
 export type ModerationCase = {
   id: string;
@@ -157,8 +173,19 @@ export type ModerationCase = {
     title: string;
     type: string;
     status: string;
+    description: string | null;
+    quantity: string;
+    unit: string;
+    unitPrice: string | null;
+    currency: string;
+    city: string | null;
+    state: string | null;
+    riskClassification: string;
+    requiresDocuments: boolean;
+    ownTransport: boolean;
     company: { legalName: string; tradeName: string | null };
     category: { name: string };
+    media: ListingMedia[];
   };
 };
 export type Favorite = {
@@ -180,6 +207,8 @@ export type Favorite = {
 export type Proposal = {
   id: string;
   listingId: string;
+  proposerCompanyId: string;
+  createdByUserId: string;
   quantity: string;
   unitPrice: string;
   currency: string;
@@ -191,11 +220,30 @@ export type Proposal = {
     title: string;
     type: string;
     status: string;
+    companyId: string;
     company: { legalName: string; tradeName: string | null };
   };
   proposerCompany: { id: string; legalName: string; tradeName: string | null };
   deal: { id: string; status: string; createdAt: string } | null;
+  validUntil: string | null;
+  updatedAt: string;
+  revisions: {
+    id: string;
+    quantity: string;
+    unitPrice: string;
+    notes: string | null;
+    actorUserId: string;
+    createdAt: string;
+  }[];
 };
+
+export function listingMediaUrl(id: string, owner = false) {
+  return `${API_URL}/listings/media/${id}${owner ? '/owner' : ''}`;
+}
+
+export function moderationMediaUrl(id: string) {
+  return `${API_URL}/admin/moderation/cases/media/${id}`;
+}
 export type Conversation = {
   id: string;
   proposalId: string | null;
@@ -230,6 +278,9 @@ export type AdminStats = {
   kpis: {
     users: number;
     companies: number;
+    verifiedCompanies: number;
+    totalProposals: number;
+    activeDeals: number;
     publishedListings: number;
     acceptedDeals: number;
     openModeration: number;
@@ -251,6 +302,20 @@ export type AdminStats = {
     proposals: number;
   }[];
 };
+export type HomeCarouselSlide = {
+  id: string;
+  position: number;
+  altText: string;
+  sha256: string;
+  version?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  updatedBy?: { id: string; name: string };
+};
+
+export function carouselImageUrl(slide: HomeCarouselSlide) {
+  return `${API_URL}/home-carousel/slides/${slide.position}/image/${slide.sha256}`;
+}
 export type AdminUser = {
   id: string;
   name: string;
@@ -383,6 +448,10 @@ export const api = {
   },
   listingBySlug: (slug: string) =>
     request<{ listing: ListingDetail }>(`/listings/${slug}`),
+  myListing: (id: string) =>
+    request<{ listing: ListingDetail & { status: string } }>(
+      `/listings/mine/${id}`,
+    ),
   createListing: (input: {
     companyId: string;
     categoryId: string;
@@ -406,6 +475,14 @@ export const api = {
       body: JSON.stringify(input),
     }),
   myListings: () => request<{ listings: ListingCard[] }>('/listings/mine'),
+  uploadListingPhotos: (id: string, photos: File[]) => {
+    const body = new FormData();
+    photos.forEach((photo) => body.append('photos', photo));
+    return request<{ media: ListingMedia[] }>(`/listings/${id}/media`, {
+      method: 'POST',
+      body,
+    });
+  },
   submitListing: (id: string) =>
     request<{ listing: unknown }>(`/listings/${id}/submit`, {
       method: 'POST',
@@ -415,10 +492,12 @@ export const api = {
   approveModeration: (id: string) =>
     request<{ listing: unknown }>(`/admin/moderation/cases/${id}/approve`, {
       method: 'POST',
+      headers: { 'X-Admin-Action': '1' },
     }),
   rejectModeration: (id: string, reason: string) =>
     request<{ listing: unknown }>(`/admin/moderation/cases/${id}/reject`, {
       method: 'POST',
+      headers: { 'X-Admin-Action': '1' },
       body: JSON.stringify({ reason }),
     }),
   favorites: () => request<{ favorites: Favorite[] }>('/favorites'),
@@ -433,6 +512,7 @@ export const api = {
       { method: 'DELETE' },
     ),
   proposals: () => request<{ proposals: Proposal[] }>('/proposals'),
+  proposal: (id: string) => request<{ proposal: Proposal }>(`/proposals/${id}`),
   createProposal: (input: {
     listingId: string;
     proposerCompanyId: string;
@@ -445,23 +525,35 @@ export const api = {
       body: JSON.stringify(input),
     }),
   acceptProposal: (id: string) =>
-    request<{ id: string; status: string }>(`/proposals/${id}/accept`, {
-      method: 'POST',
-    }),
+    request<{ deal: { id: string; status: string } }>(
+      `/proposals/${id}/accept`,
+      {
+        method: 'POST',
+      },
+    ),
   rejectProposal: (id: string) =>
-    request<{ id: string; status: string }>(`/proposals/${id}/reject`, {
+    request<{ proposal: Proposal }>(`/proposals/${id}/reject`, {
       method: 'POST',
     }),
   counterProposal: (
     id: string,
     input: { quantity: string; unitPrice: string; notes?: string },
   ) =>
-    request<{ id: string; status: string }>(`/proposals/${id}/counter`, {
+    request<{ proposal: Proposal }>(`/proposals/${id}/counter`, {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  cancelProposal: (id: string) =>
+    request<{ proposal: Proposal }>(`/proposals/${id}/cancel`, {
+      method: 'POST',
+    }),
   conversations: () =>
     request<{ conversations: Conversation[] }>('/conversations'),
+  createConversation: (proposalId: string) =>
+    request<{ conversation: Conversation }>('/conversations', {
+      method: 'POST',
+      body: JSON.stringify({ proposalId }),
+    }),
   messages: (id: string) =>
     request<{ messages: Message[] }>(`/conversations/${id}/messages`),
   sendMessage: (id: string, body: string) =>
@@ -486,8 +578,33 @@ export const api = {
   updateAdminUserRole: (id: string, platformRole: AdminUser['platformRole']) =>
     request<AdminUser>(`/admin/dashboard/users/${id}/role`, {
       method: 'PATCH',
+      headers: { 'X-Admin-Action': '1' },
       body: JSON.stringify({ platformRole }),
     }),
+  adminCarouselSlides: () =>
+    request<{ slides: HomeCarouselSlide[] }>('/admin/home-carousel/slides'),
+  replaceCarouselSlide: (
+    position: number,
+    input: { image: File; altText: string; expectedVersion: number },
+  ) => {
+    const body = new FormData();
+    body.append('image', input.image);
+    body.append('altText', input.altText);
+    body.append('expectedVersion', String(input.expectedVersion));
+    return request<{ slide: HomeCarouselSlide }>(
+      `/admin/home-carousel/slides/${position}`,
+      { method: 'PUT', headers: { 'X-Admin-Action': '1' }, body },
+    );
+  },
+  resetCarouselSlide: (position: number, expectedVersion: number) =>
+    request<{ position: number; reset: boolean }>(
+      `/admin/home-carousel/slides/${position}`,
+      {
+        method: 'DELETE',
+        headers: { 'X-Admin-Action': '1' },
+        body: JSON.stringify({ expectedVersion }),
+      },
+    ),
   payments: () => request<{ payments: Payment[] }>('/payments'),
   createPaymentCheckout: (dealId: string, idempotencyKey: string) =>
     request<Payment>('/payments/checkout', {

@@ -36,6 +36,15 @@ import { PaymentsController } from './modules/payments/payments.controller';
 import { PaymentsService } from './modules/payments/payments.service';
 import { LogisticsController } from './modules/logistics/logistics.controller';
 import { LogisticsService } from './modules/logistics/logistics.service';
+import { ListingMediaStorageService } from './infrastructure/listing-media-storage.service';
+import { AdminMutationGuard } from './modules/auth/admin-mutation.guard';
+import {
+  AdminHomeCarouselController,
+  HomeCarouselController,
+} from './modules/home-carousel/home-carousel.controller';
+import { HomeCarouselService } from './modules/home-carousel/home-carousel.service';
+import { ModerationGuard } from './modules/auth/moderation.guard';
+import { AuthenticatedMutationGuard } from './modules/auth/authenticated-mutation.guard';
 
 @Controller('health')
 class HealthController {
@@ -75,6 +84,8 @@ class HealthController {
     AdminDashboardController,
     PaymentsController,
     LogisticsController,
+    HomeCarouselController,
+    AdminHomeCarouselController,
   ],
   providers: [
     PrismaService,
@@ -92,6 +103,11 @@ class HealthController {
     AdminDashboardService,
     PaymentsService,
     LogisticsService,
+    ListingMediaStorageService,
+    AdminMutationGuard,
+    HomeCarouselService,
+    ModerationGuard,
+    AuthenticatedMutationGuard,
   ],
 })
 export class AppModule {}

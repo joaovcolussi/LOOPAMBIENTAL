@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Recycle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api, Category, Company, Material } from '../../../../lib/api';
 import { SessionActions } from '../../../../components/session-actions';
+import { CurrencyInput } from '../../../../components/currency-input';
 
 export default function NewListingPage() {
   const router = useRouter();
@@ -29,8 +30,7 @@ export default function NewListingPage() {
   const [originDetails, setOriginDetails] = useState('');
   const [ownTransport, setOwnTransport] = useState(false);
   const [requiresDocuments, setRequiresDocuments] = useState(false);
-  const [hasLaudos, setHasLaudos] = useState(false);
-  const [laudos, setLaudos] = useState<string[]>([]);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [error, setError] = useState('');
@@ -62,21 +62,15 @@ export default function NewListingPage() {
     event.preventDefault();
     setError('');
     setSaving(true);
+    let listingCreated = false;
     try {
-      const laudosList = hasLaudos ? laudos.filter(Boolean) : [];
-      const laudosNote =
-        laudosList.length > 0
-          ? `\n\nLaudos disponíveis: ${laudosList.join(', ')}`
-          : '';
       const { listing } = await api.createListing({
         companyId,
         categoryId,
         materialId: materialId || undefined,
         type,
         title,
-        description: description
-          ? `${description}${laudosNote}`
-          : laudosNote.trim() || undefined,
+        description: description || undefined,
         quantity,
         unit,
         unitPrice: unitPrice || undefined,
@@ -88,11 +82,15 @@ export default function NewListingPage() {
         city,
         state,
       });
+      listingCreated = true;
+      if (photos.length) await api.uploadListingPhotos(listing.id, photos);
       await api.submitListing(listing.id);
-      router.push('/dashboard/anuncios');
+      router.push('/dashboard/anuncios?created=review');
     } catch {
       setError(
-        'Não foi possível publicar o anúncio. Confira os dados e tente novamente.',
+        listingCreated
+          ? 'O anúncio foi salvo como rascunho, mas as fotos ou o envio para análise falharam. Abra o anúncio no painel para continuar.'
+          : 'Não foi possível criar o anúncio. Confira os dados e tente novamente.',
       );
     } finally {
       setSaving(false);
@@ -219,50 +217,28 @@ export default function NewListingPage() {
                 <span>Exigir laudos</span>
               </label>
             )}
-            {type === 'SELL' && (
-              <label className="form-check">
-                <input
-                  type="checkbox"
-                  checked={hasLaudos}
-                  onChange={(event) => setHasLaudos(event.target.checked)}
-                />
-                <span>Possui laudos?</span>
-              </label>
-            )}
           </div>
-          {type === 'SELL' && hasLaudos && (
-            <div className="laudos-list">
-              <label>
-                Documentos dos laudos
-                {laudos.map((value, index) => (
-                  <div className="laudo-row" key={index}>
-                    <input
-                      type="file"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        const next = [...laudos];
-                        next[index] = file ? file.name : value;
-                        setLaudos(next);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setLaudos(laudos.filter((_, i) => i !== index))
-                      }
-                    >
-                      Remover
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  className="button small"
-                  onClick={() => setLaudos([...laudos, ''])}
-                >
-                  Adicionar documento
-                </button>
-              </label>
+          <label>
+            Fotos do anúncio
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              onChange={(event) =>
+                setPhotos(Array.from(event.target.files ?? []).slice(0, 5))
+              }
+            />
+            <span className="form-note">
+              Até 5 fotos JPEG, PNG ou WebP, com no máximo 5 MB cada.
+            </span>
+          </label>
+          {photos.length > 0 && (
+            <div className="photo-selection" aria-live="polite">
+              {photos.map((photo) => (
+                <span key={`${photo.name}-${photo.lastModified}`}>
+                  {photo.name}
+                </span>
+              ))}
             </div>
           )}
           <label>
@@ -339,11 +315,10 @@ export default function NewListingPage() {
           <div className="form-row">
             <label>
               Preço unitário
-              <input
-                pattern="[0-9]+(\.[0-9]{1,3})?"
+              <CurrencyInput
                 value={unitPrice}
-                onChange={(event) => setUnitPrice(event.target.value)}
-                placeholder="Opcional"
+                onChange={setUnitPrice}
+                placeholder="R$ 0,00 (opcional)"
               />
             </label>
             <label>
@@ -369,7 +344,7 @@ export default function NewListingPage() {
             </p>
           )}
           <button className="button" disabled={saving}>
-            {saving ? 'Publicando...' : 'Publicar anúncio'}{' '}
+            {saving ? 'Enviando...' : 'Enviar anúncio para análise'}{' '}
             <ArrowRight size={16} />
           </button>
         </form>

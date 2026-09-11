@@ -5,6 +5,8 @@ import {
   Building2,
   DollarSign,
   FileCheck2,
+  Image,
+  ListChecks,
   Mail,
   Recycle,
   ShieldCheck,
@@ -21,6 +23,32 @@ const money = (value: number) =>
     currency: 'BRL',
     maximumFractionDigits: 0,
   }).format(value);
+
+const statusLabels: Record<string, string> = {
+  ACTIVE: 'Ativo',
+  PENDING: 'Pendente',
+  BLOCKED: 'Bloqueado',
+  DRAFT: 'Rascunho',
+  PENDING_REVIEW: 'Em análise',
+  PUBLISHED: 'Publicado',
+  PAUSED: 'Pausado',
+  NEGOTIATING: 'Em negociação',
+  CLOSED: 'Encerrado',
+  EXPIRED: 'Expirado',
+  REJECTED: 'Rejeitado',
+  ARCHIVED: 'Arquivado',
+  COUNTERED: 'Contraproposta',
+  ACCEPTED: 'Aceito',
+  CANCELLED: 'Cancelado',
+  OPEN: 'Aberto',
+  COMPLETED: 'Concluído',
+  AWAITING_DOCUMENTS: 'Aguardando documentos',
+  AWAITING_PAYMENT: 'Aguardando pagamento',
+  AWAITING_PICKUP: 'Aguardando coleta',
+  IN_TRANSIT: 'Em trânsito',
+  DELIVERED: 'Entregue',
+  DISPUTED: 'Em disputa',
+};
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -121,7 +149,22 @@ export default function AdminDashboardPage() {
       value: stats.kpis.companies,
       icon: Building2,
     },
+    {
+      label: 'Empresas verificadas',
+      value: stats.kpis.verifiedCompanies,
+      icon: ShieldCheck,
+    },
     { label: 'Usuários', value: stats.kpis.users, icon: Users },
+    {
+      label: 'Propostas registradas',
+      value: stats.kpis.totalProposals,
+      icon: ListChecks,
+    },
+    {
+      label: 'Negociações ativas',
+      value: stats.kpis.activeDeals,
+      icon: TrendingUp,
+    },
     {
       label: 'Casos para moderar',
       value: stats.kpis.openModeration,
@@ -143,6 +186,9 @@ export default function AdminDashboardPage() {
         <div className="nav-actions">
           <a className="back-link" href="/admin/moderacao">
             Moderação
+          </a>
+          <a className="back-link" href="/admin/carrossel">
+            Carrossel
           </a>
           <a className="back-link" href="/dashboard">
             Voltar ao painel
@@ -175,6 +221,36 @@ export default function AdminDashboardPage() {
             </article>
           ))}
         </div>
+        <section className="admin-shortcuts" aria-label="Ações administrativas">
+          <a href="/admin/moderacao">
+            <ShieldCheck size={20} />
+            <span>
+              <strong>Revisar anúncios</strong>
+              <small>{stats.kpis.openModeration} aguardando decisão</small>
+            </span>
+          </a>
+          <a href="/admin/carrossel">
+            <Image size={20} />
+            <span>
+              <strong>Editar carrossel</strong>
+              <small>Gerenciar imagens da página inicial</small>
+            </span>
+          </a>
+          <a href="#usuarios">
+            <Users size={20} />
+            <span>
+              <strong>Gerenciar acessos</strong>
+              <small>Usuários recentes e permissões</small>
+            </span>
+          </a>
+          <a href="/anuncios">
+            <Recycle size={20} />
+            <span>
+              <strong>Ver marketplace</strong>
+              <small>Conferir anúncios publicados</small>
+            </span>
+          </a>
+        </section>
         <div className="admin-charts">
           <section className="admin-panel admin-demand">
             <div className="admin-panel-heading">
@@ -241,7 +317,7 @@ export default function AdminDashboardPage() {
                 .filter((item) => item.status !== 'PENDING')
                 .map((item) => (
                   <div key={item.status}>
-                    <span>{item.status}</span>
+                    <span>{statusLabels[item.status] ?? item.status}</span>
                     <b>{item.total}</b>
                   </div>
                 ))}
@@ -259,23 +335,60 @@ export default function AdminDashboardPage() {
           <div className="admin-status-grid">
             {stats.dealsByStatus.map((item) => (
               <div key={item.status}>
-                <span>{item.status}</span>
+                <span>{statusLabels[item.status] ?? item.status}</span>
                 <strong>{item.total}</strong>
               </div>
             ))}
           </div>
         </section>
-        <section className="admin-panel admin-users-panel">
+        <div className="admin-state-panels">
+          <section className="admin-panel">
+            <div className="admin-panel-heading">
+              <div>
+                <p className="eyebrow">cadastros</p>
+                <h2>Usuários por status</h2>
+              </div>
+              <Users size={20} />
+            </div>
+            <div className="admin-status-list">
+              {stats.usersByStatus.map((item) => (
+                <div key={item.status}>
+                  <span>{statusLabels[item.status] ?? item.status}</span>
+                  <b>{item.total}</b>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="admin-panel">
+            <div className="admin-panel-heading">
+              <div>
+                <p className="eyebrow">inventário</p>
+                <h2>Anúncios por status</h2>
+              </div>
+              <Recycle size={20} />
+            </div>
+            <div className="admin-status-list">
+              {stats.listingsByStatus.map((item) => (
+                <div key={item.status}>
+                  <span>{statusLabels[item.status] ?? item.status}</span>
+                  <b>{item.total}</b>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+        <section className="admin-panel admin-users-panel" id="usuarios">
           <div className="admin-panel-heading">
             <div>
               <p className="eyebrow">acessos da plataforma</p>
-              <h2>Usuários e permissões</h2>
+              <h2>Usuários recentes e permissões</h2>
             </div>
             <Users size={20} />
           </div>
           <p className="admin-panel-lede">
-            Consulte os e-mails cadastrados e conceda acesso de administrador ou
-            moderador conforme a responsabilidade de cada pessoa.
+            Consulte os 100 cadastros mais recentes e conceda acesso de
+            administrador ou moderador conforme a responsabilidade de cada
+            pessoa.
           </p>
           {userError && <p className="form-error">{userError}</p>}
           {users.length === 0 ? (

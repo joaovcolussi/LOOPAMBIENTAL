@@ -1,0 +1,21 @@
+CREATE TABLE `listing_media` (
+  `id` VARCHAR(36) NOT NULL,
+  `listing_id` VARCHAR(36) NOT NULL,
+  `uploaded_by_user_id` VARCHAR(36) NOT NULL,
+  `storage_key` VARCHAR(255) NOT NULL,
+  `mime_type` VARCHAR(80) NOT NULL,
+  `size_bytes` INTEGER NOT NULL,
+  `sha256` CHAR(64) NOT NULL,
+  `alt_text` VARCHAR(180) NULL,
+  `sort_order` INTEGER NOT NULL DEFAULT 0,
+  `status` ENUM('READY', 'REJECTED') NOT NULL DEFAULT 'READY',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL,
+  UNIQUE INDEX `listing_media_storage_key_key`(`storage_key`),
+  INDEX `listing_media_listing_id_status_sort_order_idx`(`listing_id`, `status`, `sort_order`),
+  INDEX `listing_media_uploaded_by_user_id_idx`(`uploaded_by_user_id`),
+  UNIQUE INDEX `listing_media_listing_id_sort_order_key`(`listing_id`, `sort_order`),
+  PRIMARY KEY (`id`),
+  CONSTRAINT `listing_media_listing_id_fkey` FOREIGN KEY (`listing_id`) REFERENCES `listings`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `listing_media_uploaded_by_user_id_fkey` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

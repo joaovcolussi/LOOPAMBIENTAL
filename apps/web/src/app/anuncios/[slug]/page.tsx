@@ -13,6 +13,9 @@ import { FormEvent, useEffect, useState } from 'react';
 import { api, isAuthenticationError, ListingDetail } from '../../../lib/api';
 import { SessionActions } from '../../../components/session-actions';
 import { FavoriteButton } from '../../../components/favorite-button';
+import { CurrencyInput } from '../../../components/currency-input';
+import { formatMoney, formatQuantity } from '../../../lib/format';
+import { listingMediaUrl } from '../../../lib/api';
 
 const frequencyLabels: Record<string, string> = {
   ONE_TIME: 'Operação única',
@@ -45,6 +48,7 @@ export default function ListingDetailPage() {
   const [proposalPrice, setProposalPrice] = useState('');
   const [proposalNotes, setProposalNotes] = useState('');
   const [proposalMessage, setProposalMessage] = useState('');
+  const [proposalSent, setProposalSent] = useState(false);
   const [companyError, setCompanyError] = useState('');
 
   useEffect(() => {
@@ -90,10 +94,7 @@ export default function ListingDetailPage() {
 
   const contact = listing.company.contact;
   const price = listing.unitPrice
-    ? new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: listing.currency,
-      }).format(Number(listing.unitPrice))
+    ? formatMoney(listing.unitPrice, listing.currency)
     : 'A combinar';
   const whatsapp = contact?.whatsapp?.replace(/\D/g, '');
   const proposalAction =
@@ -125,6 +126,7 @@ export default function ListingDetailPage() {
       setProposalMessage(
         'Proposta enviada. A empresa anunciante será notificada.',
       );
+      setProposalSent(true);
     } catch {
       setProposalMessage(
         'Não foi possível enviar a proposta. Confira os dados e sua permissão.',
@@ -180,6 +182,17 @@ export default function ListingDetailPage() {
         </div>
         <div className="detail-grid">
           <article className="detail-main-card">
+            {listing.media.length > 0 && (
+              <div className="detail-media-gallery">
+                {listing.media.map((media) => (
+                  <img
+                    key={media.id}
+                    src={listingMediaUrl(media.id)}
+                    alt={media.altText || listing.title}
+                  />
+                ))}
+              </div>
+            )}
             <div className="detail-price">
               <span>Preço unitário</span>
               <strong>
@@ -195,13 +208,13 @@ export default function ListingDetailPage() {
               <div>
                 <span>Quantidade</span>
                 <strong>
-                  {listing.quantity} {listing.unit}
+                  {formatQuantity(listing.quantity)} {listing.unit}
                 </strong>
               </div>
               <div>
                 <span>Disponível</span>
                 <strong>
-                  {listing.availableQuantity} {listing.unit}
+                  {formatQuantity(listing.availableQuantity)} {listing.unit}
                 </strong>
               </div>
               <div>
@@ -295,11 +308,15 @@ export default function ListingDetailPage() {
                 </label>
                 <label>
                   Preço unitário
-                  <input
+                  <CurrencyInput
                     required
                     value={proposalPrice}
-                    onChange={(event) => setProposalPrice(event.target.value)}
-                    placeholder={listing.unitPrice || 'A combinar'}
+                    onChange={setProposalPrice}
+                    placeholder={
+                      listing.unitPrice
+                        ? formatMoney(listing.unitPrice)
+                        : 'R$ 0,00'
+                    }
                   />
                 </label>
               </div>
@@ -317,8 +334,9 @@ export default function ListingDetailPage() {
                   {proposalMessage}
                 </p>
               )}
-              <button className="button" type="submit">
-                {proposalAction} <ArrowRight size={16} />
+              <button className="button" type="submit" disabled={proposalSent}>
+                {proposalSent ? 'Proposta enviada' : proposalAction}{' '}
+                <ArrowRight size={16} />
               </button>
             </form>
           </article>
