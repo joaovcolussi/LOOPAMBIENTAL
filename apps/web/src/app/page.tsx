@@ -73,6 +73,7 @@ export default async function HomePage() {
         <div className="nav-links">
           <a href="/como-funciona">Como funciona</a>
           <a href="#anuncios">Anúncios</a>
+          <a href="/planos">Planos</a>
           <a href="/empresas">Para empresas</a>
         </div>
         <div className="nav-actions">
@@ -273,6 +274,11 @@ export default async function HomePage() {
         <a className="brand" href="/">
           <Recycle size={20} /> LOOP <span>AMBIENTAL</span>
         </a>
+        <div className="footer-links">
+          <a href="/planos">Planos</a>
+          <a href="/termos">Termos</a>
+          <a href="/privacidade">Privacidade</a>
+        </div>
         <span>Mercado circular para negócios melhores.</span>
         <span>© 2026 LOOP AMBIENTAL</span>
       </footer>

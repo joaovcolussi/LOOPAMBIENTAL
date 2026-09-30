@@ -1,15 +1,16 @@
 {
   "name": "@loopambiental/database",
   "private": true,
-  "main": "dist/src/index.js",
-  "types": "dist/src/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "generate": "prisma generate",
     "db:push": "tsx --env-file=../../.env node_modules/prisma/build/index.js db push",
     "db:migrate": "tsx --env-file=../../.env node_modules/prisma/build/index.js migrate dev",
+    "db:deploy": "tsx --env-file=../../.env node_modules/prisma/build/index.js migrate deploy",
+    "db:status": "tsx --env-file=../../.env node_modules/prisma/build/index.js migrate status",
     "db:validate": "tsx --env-file=../../.env node_modules/prisma/build/index.js validate",
-    "db:demo": "tsx --env-file=../../.env src/demo-data.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

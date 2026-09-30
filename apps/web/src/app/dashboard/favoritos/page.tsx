@@ -3,23 +3,43 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Heart, Recycle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { api, Favorite } from '../../../lib/api';
+import { api, Favorite, isAuthenticationError } from '../../../lib/api';
+import { formatQuantity } from '../../../lib/format';
 import { SessionActions } from '../../../components/session-actions';
 
 export default function FavoritesPage() {
   const router = useRouter();
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [loading, setLoading] = useState(true);
+  const [removingId, setRemovingId] = useState('');
+  const [error, setError] = useState('');
   useEffect(() => {
     api
       .favorites()
       .then(({ favorites: result }) => setFavorites(result))
-      .catch(() => router.replace('/entrar'))
+      .catch((caught) => {
+        if (isAuthenticationError(caught))
+          router.replace('/entrar?next=/dashboard/favoritos');
+        else
+          setError(
+            'Não foi possível carregar seus favoritos. Tente novamente.',
+          );
+      })
       .finally(() => setLoading(false));
   }, [router]);
   async function remove(id: string) {
-    await api.removeFavorite(id);
-    setFavorites((current) => current.filter((item) => item.listing.id !== id));
+    setRemovingId(id);
+    setError('');
+    try {
+      await api.removeFavorite(id);
+      setFavorites((current) =>
+        current.filter((item) => item.listing.id !== id),
+      );
+    } catch {
+      setError('Não foi possível remover o anúncio dos favoritos.');
+    } finally {
+      setRemovingId('');
+    }
   }
   if (loading)
     return (
@@ -46,6 +66,11 @@ export default function FavoritesPage() {
         <p className="dashboard-lede">
           Anúncios que você quer acompanhar de perto.
         </p>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
         {favorites.length === 0 ? (
           <div className="empty-panel favorite-empty">
             <Heart size={22} />
@@ -73,7 +98,7 @@ export default function FavoritesPage() {
                     · {item.listing.category.name}
                   </p>
                   <small>
-                    {item.listing.quantity} {item.listing.unit}{' '}
+                    {formatQuantity(item.listing.quantity)} {item.listing.unit}{' '}
                     {item.listing.city
                       ? `· ${item.listing.city}, ${item.listing.state}`
                       : ''}
@@ -86,7 +111,9 @@ export default function FavoritesPage() {
                   </a>
                 </div>
                 <button
+                  type="button"
                   aria-label={`Remover ${item.listing.title} dos favoritos`}
+                  disabled={removingId === item.listing.id}
                   onClick={() => remove(item.listing.id)}
                 >
                   <Heart size={17} fill="currentColor" />

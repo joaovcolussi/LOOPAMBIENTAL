@@ -6,18 +6,7 @@ import { useRouter } from 'next/navigation';
 import { api, AuthUser, ListingCard } from '../../../lib/api';
 import { SessionActions } from '../../../components/session-actions';
 import { ListingCard as ListingCardView } from '../../../components/listing-card';
-
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Rascunho',
-  PENDING_REVIEW: 'Em análise',
-  PUBLISHED: 'Publicado',
-  PAUSED: 'Pausado',
-  NEGOTIATING: 'Em negociação',
-  CLOSED: 'Encerrado',
-  EXPIRED: 'Expirado',
-  REJECTED: 'Rejeitado',
-  ARCHIVED: 'Arquivado',
-};
+import { listingStatusLabels } from '../../../lib/labels';
 
 export default function ListingsDashboardPage() {
   const router = useRouter();
@@ -99,7 +88,7 @@ export default function ListingsDashboardPage() {
                 <span
                   className={`admin-user-status ${listing.status.toLowerCase()}`}
                 >
-                  {statusLabels[listing.status] ?? listing.status}
+                  {listingStatusLabels[listing.status] ?? listing.status}
                 </span>
                 <ListingCardView
                   listing={listing}

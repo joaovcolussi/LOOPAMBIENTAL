@@ -14,6 +14,7 @@ import { api, isAuthenticationError, ListingDetail } from '../../../lib/api';
 import { SessionActions } from '../../../components/session-actions';
 import { FavoriteButton } from '../../../components/favorite-button';
 import { CurrencyInput } from '../../../components/currency-input';
+import { ReportButton } from '../../../components/report-button';
 import { formatMoney, formatQuantity } from '../../../lib/format';
 import { listingMediaUrl } from '../../../lib/api';
 
@@ -50,6 +51,8 @@ export default function ListingDetailPage() {
   const [proposalMessage, setProposalMessage] = useState('');
   const [proposalSent, setProposalSent] = useState(false);
   const [companyError, setCompanyError] = useState('');
+  const [unlocking, setUnlocking] = useState(false);
+  const [contactError, setContactError] = useState('');
 
   useEffect(() => {
     if (!params.slug) return;
@@ -101,6 +104,28 @@ export default function ListingDetailPage() {
     listing.type === 'SELL'
       ? 'Enviar proposta de compra'
       : 'Enviar oferta de venda';
+
+  async function unlockContact() {
+    if (!listing) return;
+    const targetCompany = companyId || companies[0]?.id;
+    if (!targetCompany) {
+      setContactError(
+        'Entre e selecione uma empresa para desbloquear o contato.',
+      );
+      return;
+    }
+    setUnlocking(true);
+    setContactError('');
+    try {
+      await api.unlockListingContact(listing.id, targetCompany);
+      const { listing: refreshed } = await api.listingBySlug(listing.slug);
+      setListing(refreshed);
+    } catch {
+      setContactError('Não foi possível desbloquear o contato.');
+    } finally {
+      setUnlocking(false);
+    }
+  }
 
   async function submitProposal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -346,7 +371,15 @@ export default function ListingDetailPage() {
                 ? 'empresa compradora'
                 : 'empresa vendedora'}
             </p>
-            <h2>{listing.company.tradeName || listing.company.legalName}</h2>
+            <h2>
+              {listing.company.slug ? (
+                <a href={`/empresas/${listing.company.slug}`}>
+                  {listing.company.tradeName || listing.company.legalName}
+                </a>
+              ) : (
+                listing.company.tradeName || listing.company.legalName
+              )}
+            </h2>
             <p className="seller-status">
               {listing.company.verification === 'VERIFIED' ? (
                 <>
@@ -412,21 +445,34 @@ export default function ListingDetailPage() {
                     'Contato confidencial'}
                 </strong>
                 <p>
-                  A empresa e seu papel comercial aparecem para você. E-mail,
-                  telefone e endereço detalhado ficam protegidos conforme as
-                  regras de privacidade da negociação.
+                  Desbloqueie o contato para ver responsável, e-mail, telefone e
+                  endereço comercial desta empresa.
                 </p>
-                <a
-                  className="text-link"
-                  href={companies.length > 0 ? '#proposal-form' : '/entrar'}
-                >
-                  {companies.length > 0
-                    ? 'Ver negociação'
-                    : 'Entrar para negociar'}{' '}
-                  <ArrowRight size={15} />
-                </a>
+                {contactError && (
+                  <p className="form-error" role="alert">
+                    {contactError}
+                  </p>
+                )}
+                {companies.length > 0 ? (
+                  <button
+                    className="button small"
+                    type="button"
+                    disabled={unlocking}
+                    onClick={unlockContact}
+                  >
+                    {unlocking ? 'Liberando...' : 'Desbloquear contato'}
+                  </button>
+                ) : (
+                  <a
+                    className="text-link"
+                    href={`/entrar?next=/anuncios/${listing.slug}`}
+                  >
+                    Entrar para desbloquear <ArrowRight size={15} />
+                  </a>
+                )}
               </div>
             )}
+            <ReportButton listingId={listing.id} />
           </aside>
         </div>
       </section>

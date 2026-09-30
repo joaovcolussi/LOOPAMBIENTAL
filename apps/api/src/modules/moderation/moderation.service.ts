@@ -65,6 +65,15 @@ export class ModerationService {
       await transaction.moderationAction.create({
         data: { caseId, actorId, type: 'APPROVE' },
       });
+      await transaction.listingStatusHistory.create({
+        data: {
+          listingId: moderationCase.listingId,
+          fromStatus: 'PENDING_REVIEW',
+          toStatus: 'PUBLISHED',
+          actorUserId: actorId,
+          reason: 'MODERATION_APPROVED',
+        },
+      });
       return transaction.listing.findUniqueOrThrow({
         where: { id: moderationCase.listingId },
         select: { id: true, title: true, status: true, publishedAt: true },
@@ -98,6 +107,15 @@ export class ModerationService {
         throw new ConflictException('LISTING_STATE_CHANGED');
       await transaction.moderationAction.create({
         data: { caseId, actorId, type: 'REJECT', reason: reason.trim() },
+      });
+      await transaction.listingStatusHistory.create({
+        data: {
+          listingId: moderationCase.listingId,
+          fromStatus: 'PENDING_REVIEW',
+          toStatus: 'REJECTED',
+          actorUserId: actorId,
+          reason: 'MODERATION_REJECTED',
+        },
       });
       return transaction.listing.findUniqueOrThrow({
         where: { id: moderationCase.listingId },

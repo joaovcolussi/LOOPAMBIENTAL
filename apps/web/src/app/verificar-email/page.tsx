@@ -15,7 +15,7 @@ export default function VerifyEmailPage() {
     api
       .verifyEmail(token)
       .then(() => setStatus('E-mail verificado com sucesso.'))
-      .catch(() => setStatus('O link e invalido ou expirou.'));
+      .catch(() => setStatus('O link é inválido ou expirou.'));
   }, []);
   return (
     <main className="auth-page">

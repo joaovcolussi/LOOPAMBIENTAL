@@ -93,8 +93,17 @@ services:
       dockerfile: infra/docker/Containerfile.worker
     environment:
       DATABASE_URL: mysql://loopambiental:loopambiental_local@mysql:3306/loopambiental
+      REDIS_URL: redis://redis:6379
+      WEB_PUBLIC_URL: http://localhost:3000
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM: LOOP AMBIENTAL <no-reply@loopambiental.com>
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
   web:
     build:

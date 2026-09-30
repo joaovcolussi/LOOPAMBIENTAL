@@ -3,12 +3,15 @@
 import {
   BarChart3,
   Building2,
+  CreditCard,
   DollarSign,
   FileCheck2,
+  Flag,
   Image,
   ListChecks,
   Mail,
   Recycle,
+  Settings,
   ShieldCheck,
   TrendingUp,
   Users,
@@ -229,11 +232,74 @@ export default function AdminDashboardPage() {
               <small>{stats.kpis.openModeration} aguardando decisão</small>
             </span>
           </a>
+          <a href="/admin/verificacoes">
+            <FileCheck2 size={20} />
+            <span>
+              <strong>Verificar empresas</strong>
+              <small>Analisar documentos enviados</small>
+            </span>
+          </a>
+          <a href="/admin/denuncias">
+            <Flag size={20} />
+            <span>
+              <strong>Denúncias</strong>
+              <small>Revisar relatos da comunidade</small>
+            </span>
+          </a>
           <a href="/admin/carrossel">
             <Image size={20} />
             <span>
               <strong>Editar carrossel</strong>
               <small>Gerenciar imagens da página inicial</small>
+            </span>
+          </a>
+          <a href="/admin/usuarios">
+            <Users size={20} />
+            <span>
+              <strong>Usuários</strong>
+              <small>Contas, status e papéis</small>
+            </span>
+          </a>
+          <a href="/admin/empresas">
+            <Building2 size={20} />
+            <span>
+              <strong>Empresas</strong>
+              <small>Cadastro, status e verificação</small>
+            </span>
+          </a>
+          <a href="/admin/anuncios">
+            <Recycle size={20} />
+            <span>
+              <strong>Anúncios</strong>
+              <small>Todos os anúncios e moderação</small>
+            </span>
+          </a>
+          <a href="/admin/assinaturas">
+            <CreditCard size={20} />
+            <span>
+              <strong>Assinaturas</strong>
+              <small>Planos e assinaturas das empresas</small>
+            </span>
+          </a>
+          <a href="/admin/pagamentos">
+            <CreditCard size={20} />
+            <span>
+              <strong>Pagamentos</strong>
+              <small>Transações das negociações</small>
+            </span>
+          </a>
+          <a href="/admin/auditoria">
+            <ShieldCheck size={20} />
+            <span>
+              <strong>Auditoria</strong>
+              <small>Histórico de ações administrativas</small>
+            </span>
+          </a>
+          <a href="/admin/configuracoes">
+            <Settings size={20} />
+            <span>
+              <strong>Configurações</strong>
+              <small>Parâmetros operacionais</small>
             </span>
           </a>
           <a href="#usuarios">

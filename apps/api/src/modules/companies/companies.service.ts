@@ -9,8 +9,10 @@ import {
   createDecipheriv,
   createHash,
   randomBytes,
+  randomUUID,
 } from 'node:crypto';
 import { PrismaService } from '../../infrastructure/prisma.service';
+import { publicListingCardSelect } from '../listings/public-listing-select';
 
 export type CompanyInput = {
   legalName?: string;
@@ -27,6 +29,8 @@ export type CompanyInput = {
   addressDistrict?: string;
   addressPostalCode?: string;
   contactVisibility?: 'PRIVATE' | 'MEMBERS' | 'PUBLIC';
+  latitude?: number;
+  longitude?: number;
 };
 
 @Injectable()
@@ -38,6 +42,7 @@ export class CompaniesService {
     const company = await this.prisma.company.create({
       data: {
         legalName: input.legalName,
+        slug: `${this.slugify(input.tradeName || input.legalName)}-${randomUUID().slice(0, 8)}`,
         tradeName: input.tradeName,
         description: input.description,
         city: input.city,
@@ -52,6 +57,8 @@ export class CompaniesService {
         addressDistrict: input.addressDistrict,
         addressPostalCode: input.addressPostalCode,
         contactVisibility: input.contactVisibility,
+        latitude: input.latitude,
+        longitude: input.longitude,
         status: 'ACTIVE',
         members: { create: { userId, role: 'OWNER' } },
       },
@@ -67,6 +74,35 @@ export class CompaniesService {
       select: this.companySelect,
     });
     return companies.map((company) => this.withMaskedTaxId(company));
+  }
+
+  async findPublicBySlug(slug: string): Promise<unknown> {
+    const company = await this.prisma.company.findFirst({
+      where: { slug, deletedAt: null, status: 'ACTIVE' },
+      select: {
+        id: true,
+        slug: true,
+        legalName: true,
+        tradeName: true,
+        description: true,
+        city: true,
+        state: true,
+        latitude: true,
+        longitude: true,
+        verification: true,
+        ratingAverage: true,
+        ratingCount: true,
+        createdAt: true,
+      },
+    });
+    if (!company) throw new NotFoundException('COMPANY_NOT_FOUND');
+    const listings = await this.prisma.listing.findMany({
+      where: { companyId: company.id, status: 'PUBLISHED', deletedAt: null },
+      orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+      take: 24,
+      select: publicListingCardSelect,
+    });
+    return { company, listings };
   }
 
   async findById(id: string, userId: string) {
@@ -147,6 +183,10 @@ export class CompaniesService {
         ...(input.contactVisibility
           ? { contactVisibility: input.contactVisibility }
           : {}),
+        ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
+        ...(input.longitude !== undefined
+          ? { longitude: input.longitude }
+          : {}),
       },
       select: this.companySelect,
     });
@@ -163,6 +203,18 @@ export class CompaniesService {
     }
   }
 
+  private slugify(value: string) {
+    return (
+      value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 180) || 'empresa'
+    );
+  }
+
   private normalizeTaxId(value?: string) {
     if (!value) return '';
     const normalized = value.replace(/[^A-Za-z0-9]/g, '');
@@ -176,10 +228,18 @@ export class CompaniesService {
     return createHash('sha256').update(value.toLowerCase()).digest('hex');
   }
 
+  private fieldKey(): string {
+    const configured = process.env.FIELD_ENCRYPTION_KEY;
+    if (!configured) {
+      if (process.env.NODE_ENV === 'production')
+        throw new Error('FIELD_ENCRYPTION_KEY_REQUIRED');
+      return 'loop-local-field-key';
+    }
+    return configured;
+  }
+
   private encrypt(value: string) {
-    const key = createHash('sha256')
-      .update(process.env.FIELD_ENCRYPTION_KEY ?? 'loop-local-field-key')
-      .digest();
+    const key = createHash('sha256').update(this.fieldKey()).digest();
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', key, iv);
     const encrypted = Buffer.concat([cipher.update(value), cipher.final()]);
@@ -190,9 +250,7 @@ export class CompaniesService {
     try {
       const [, ivB64, tagB64, dataB64] = value.split(':');
       if (!ivB64 || !tagB64 || !dataB64) return null;
-      const key = createHash('sha256')
-        .update(process.env.FIELD_ENCRYPTION_KEY ?? 'loop-local-field-key')
-        .digest();
+      const key = createHash('sha256').update(this.fieldKey()).digest();
       const decipher = createDecipheriv(
         'aes-256-gcm',
         key,
@@ -232,6 +290,7 @@ export class CompaniesService {
 
   private readonly companySelect = {
     id: true,
+    slug: true,
     legalName: true,
     tradeName: true,
     description: true,
@@ -246,6 +305,8 @@ export class CompaniesService {
     addressDistrict: true,
     addressPostalCode: true,
     contactVisibility: true,
+    latitude: true,
+    longitude: true,
     status: true,
     verification: true,
     createdAt: true,

@@ -36,6 +36,29 @@ describe('AuthService', () => {
       }),
     );
     expect(prisma.session.create).toHaveBeenCalledTimes(1);
+    const sessionData = prisma.session.create.mock.calls[0][0].data;
+    expect(sessionData.absoluteExpiresAt).toBeInstanceOf(Date);
+    expect(sessionData.absoluteExpiresAt.getTime()).toBeGreaterThan(
+      sessionData.expiresAt.getTime(),
+    );
+  });
+
+  it('rejects a session past its absolute expiry without refreshing it', async () => {
+    const prisma = {
+      session: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'session-id',
+          expiresAt: new Date(Date.now() + 60_000),
+          absoluteExpiresAt: new Date(Date.now() - 1),
+          user: { status: 'ACTIVE' },
+        }),
+        updateMany: jest.fn(),
+      },
+    };
+    const service = new AuthService(prisma as never);
+
+    await expect(service.getUserByToken('token')).resolves.toBeNull();
+    expect(prisma.session.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects an incorrect password', async () => {

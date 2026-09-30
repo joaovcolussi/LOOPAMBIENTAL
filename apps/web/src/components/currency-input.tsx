@@ -29,7 +29,7 @@ export function CurrencyInput({
       value={formatCurrencyInput(value)}
       onChange={change}
       placeholder={placeholder}
-      aria-label="Valor em reais"
+      aria-label={id ? undefined : 'Valor em reais'}
     />
   );
 }

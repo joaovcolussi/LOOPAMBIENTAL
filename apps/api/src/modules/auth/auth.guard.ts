@@ -19,6 +19,7 @@ export type AuthenticatedRequest = Request & {
     email: string;
     status: string;
     platformRole: string;
+    emailVerifiedAt: Date | null;
     createdAt: Date;
   };
 };

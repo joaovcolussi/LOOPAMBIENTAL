@@ -32,6 +32,8 @@ type ListingBody = {
   requiresDocuments?: unknown;
   city?: unknown;
   state?: unknown;
+  latitude?: unknown;
+  longitude?: unknown;
 };
 
 @Controller('listings')
@@ -168,6 +170,26 @@ export class ListingsCommandController {
           : undefined,
       city: value('city', 120),
       state: value('state', 2),
+      ...this.coordinates(body),
+    };
+  }
+
+  private coordinates(body: ListingBody): {
+    latitude?: number;
+    longitude?: number;
+  } {
+    const parse = (raw: unknown, min: number, max: number) => {
+      if (raw === undefined) return undefined;
+      const numeric = Number(raw);
+      if (!Number.isFinite(numeric) || numeric < min || numeric > max)
+        throw new BadRequestException('INVALID_COORDINATES');
+      return numeric;
+    };
+    const latitude = parse(body.latitude, -90, 90);
+    const longitude = parse(body.longitude, -180, 180);
+    return {
+      ...(latitude !== undefined ? { latitude } : {}),
+      ...(longitude !== undefined ? { longitude } : {}),
     };
   }
 

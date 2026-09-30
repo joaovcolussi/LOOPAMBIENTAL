@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520">
+  <rect width="900" height="520" fill="#e6eee6"/>
+  <circle cx="760" cy="100" r="150" fill="#d6e6da"/>
+  <g fill="none" stroke="#2f775c" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M450 360l-70-40v-80l70-40 70 40v80z"/>
+    <path d="M380 200l70 40 70-40"/>
+    <path d="M450 240v120"/>
+  </g>
+  <text x="64" y="70" font-family="Arial" font-size="28" font-weight="700" fill="#2f775c">MATERIAL RECICLÁVEL</text>
+</svg>

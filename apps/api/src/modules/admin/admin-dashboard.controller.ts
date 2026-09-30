@@ -57,10 +57,10 @@ export class AdminDashboardController {
       .split(',')
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean);
-    if (
-      request.user.platformRole !== 'ADMIN' &&
-      !configuredAdmins.includes(request.user.email.toLowerCase())
-    )
+    const isConfiguredAdmin =
+      request.user.emailVerifiedAt !== null &&
+      configuredAdmins.includes(request.user.email.toLowerCase());
+    if (request.user.platformRole !== 'ADMIN' && !isConfiguredAdmin)
       throw new ForbiddenException('PLATFORM_ADMIN_REQUIRED');
   }
 }

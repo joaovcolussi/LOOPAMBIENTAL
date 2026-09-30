@@ -3,18 +3,54 @@
 Marketplace B2B para compra, venda e negociação de resíduos, recicláveis,
 sucatas e materiais reaproveitáveis.
 
+## Início rápido
+
+Depois de clonar e instalar as dependências, um único comando sobe a
+infraestrutura, aplica as migrações e inicia API, Web e Worker com hot reload:
+
+```bash
+corepack pnpm start
+```
+
+O script detecta Docker Compose ou Podman Compose automaticamente, cria os
+arquivos de ambiente que faltarem, aguarda o MySQL ficar saudável, gera o client
+do Prisma e aplica as migrações antes de iniciar os três processos. Pressione
+`Ctrl+C` para encerrar a aplicação; os containers de infraestrutura continuam em
+execução.
+
+| Comando                             | O que faz                                         |
+| ----------------------------------- | ------------------------------------------------- |
+| `corepack pnpm start`               | Sobe tudo e inicia API, Web e Worker (hot reload) |
+| `corepack pnpm start:infra`         | Sobe apenas MySQL, Redis, MinIO e Mailpit         |
+| `corepack pnpm start:db`            | Aplica as migrações no banco em execução          |
+| `node infra/scripts/start.mjs stop` | Para os containers (mantém os volumes)            |
+| `node infra/scripts/start.mjs down` | Remove os containers (mantém os volumes)          |
+
+A aplicação fica em `http://localhost:3000`. Os passos manuais, as alternativas
+com Docker/Podman e o modo containerizado estão detalhados nas seções abaixo.
+
 ## O que está implementado
 
 - Cadastro, login, recuperação e verificação de e-mail.
 - Empresas, membros e contatos com controle de visibilidade.
 - Categorias, materiais e anúncios de compra ou venda.
-- Busca, filtros, favoritos e paginação.
+- Busca com índice `FULLTEXT`, ranking por relevância, facetas, filtros,
+  favoritos e paginação por cursor.
 - Propostas, contrapropostas, negociações e mensagens.
 - Notificações, moderação, pagamentos e solicitações logísticas.
-- Painel administrativo com indicadores, permissões, moderação e gestão do
-  carrossel da página inicial.
+- Planos e assinaturas self-service (`/dashboard/assinatura`) com desbloqueio de
+  contato por benefício de plano ou avulso.
+- Avaliações e reputação após negociação concluída, com média pública por
+  empresa (`/dashboard/avaliacoes` e página pública da empresa).
+- Geolocalização: filtro por raio e ordenação por distância na busca de
+  anúncios, com coordenadas por empresa e anúncio.
+- Painel administrativo com indicadores, permissões, moderação, gestão do
+  carrossel, usuários, empresas, anúncios, assinaturas, pagamentos, auditoria e
+  configurações.
 - Fotos privadas de anúncios e imagens administrativas armazenadas em MinIO.
+- Worker com BullMQ + Redis e transactional outbox para tarefas assíncronas.
 - API NestJS, frontend Next.js, worker e banco MySQL com Prisma.
+- CI com lint, typecheck, testes, build e E2E (Playwright).
 
 Pagamentos Mercado Pago e envio de e-mail real dependem de credenciais externas.
 Em desenvolvimento, os e-mails são capturados pelo Mailpit.
@@ -113,25 +149,28 @@ docker compose ps
 O Compose inicia API, frontend, worker, MySQL, Redis, MinIO e Mailpit. Os
 healthchecks aguardam as dependências antes de liberar API e frontend.
 
-### Criar o banco e dados demo
+### Criar o banco
 
 Depois que o MySQL estiver saudável, execute na raiz do projeto:
 
 ```bash
 corepack pnpm --filter @loopambiental/database generate
-corepack pnpm --filter @loopambiental/database db:push
-corepack pnpm --filter @loopambiental/database db:demo
+corepack pnpm --filter @loopambiental/database db:deploy
 ```
 
 Esses comandos usam `localhost` no host. Dentro dos containers, a API usa o
 hostname interno `mysql`, já configurado no Compose.
 
-O diretório `packages/database/prisma/migrations` contém a linha de base para
-novos ambientes. Bancos locais criados anteriormente com `db:push` devem
-continuar usando `db:push`; antes de adotar `prisma migrate deploy` em um banco
-existente, registre a linha de base com `prisma migrate resolve --applied
-20260902000000_baseline` após validar que o schema está sincronizado e execute
-`prisma migrate deploy` para aplicar as migrações incrementais seguintes.
+O comando `db:deploy` aplica todas as migrações, incluindo o catálogo de
+referência (categorias e materiais). Não há dados de demonstração: crie a
+primeira conta em `/cadastro`. Para transformar seu usuário em administrador,
+ajuste o papel pela tabela `users` ou pelo `ADMIN_EMAILS` do `.env`.
+
+Ambientes novos devem usar `prisma migrate deploy`. Um banco existente criado
+com `db:push` deve registrar a linha de base com
+`prisma migrate resolve --applied 20260902000000_baseline` após validar que o
+schema está sincronizado e executar `prisma migrate deploy` para aplicar as
+migrações incrementais seguintes.
 
 ### Endereços
 
@@ -150,13 +189,20 @@ O painel administrativo fica em `http://localhost:3000/admin` e reúne:
 - indicadores de usuários, empresas, anúncios, propostas e negociações;
 - volume comercial, pipeline e estimativa de comissão;
 - distribuição por status e categoria;
-- gestão dos 100 usuários mais recentes e seus papéis de plataforma;
+- gestão de usuários, empresas, anúncios, assinaturas, pagamentos, auditoria e
+  configurações;
 - fila de moderação em `/admin/moderacao`;
 - substituição das quatro imagens do carrossel em `/admin/carrossel`.
 
-Somente administradores podem alterar papéis e o carrossel. Administradores e
-moderadores podem decidir casos de moderação. Todas essas mutações exigem sessão,
-origem válida e são registradas na tabela `audit_logs` quando aplicável.
+As telas administrativas por recurso ficam em `/admin/usuarios`,
+`/admin/empresas`, `/admin/anuncios`, `/admin/assinaturas`, `/admin/pagamentos`,
+`/admin/auditoria` e `/admin/configuracoes`. As listagens usam paginação por
+cursor (`nextCursor`).
+
+Somente administradores podem alterar papéis, status de empresas, remover
+anúncios, editar configurações e o carrossel. Administradores e moderadores podem
+decidir casos de moderação. Todas essas mutações exigem sessão, origem válida e
+são registradas na tabela `audit_logs` quando aplicável.
 
 As posições sem imagem personalizada usam as ilustrações incluídas no frontend.
 Imagens enviadas são limitadas a 5 MB, decodificadas e convertidas para WebP
@@ -174,6 +220,10 @@ Com Podman, substitua `docker compose` por `podman compose`. Não use `down -v`
 sem confirmação: ele apaga os volumes locais do MySQL e MinIO.
 
 ## Desenvolvimento com hot reload
+
+O caminho mais simples é `corepack pnpm start`, que executa esta seção inteira
+(infraestrutura, migrações e os três processos). Se preferir controlar cada etapa
+manualmente, siga os passos abaixo.
 
 Use apenas as dependências de infraestrutura:
 
@@ -211,13 +261,11 @@ corepack pnpm dev
 Não use o modo containerizado e o modo hot reload ao mesmo tempo, pois ambos
 usam as portas `3000` e `3001`.
 
-## Credenciais demo
+## Primeira conta
 
-O seed cria usuários de demonstração. A senha dos usuários comuns é
-`LoopAmbiental123!`. O administrador usa os valores de `DEMO_ADMIN_EMAIL` e
-`DEMO_ADMIN_PASSWORD` definidos no `.env`.
-
-Essas credenciais são somente para desenvolvimento local.
+Não há seed. Cadastre-se em `/cadastro` e crie sua empresa. Para acesso
+administrativo, inclua o e-mail do usuário em `ADMIN_EMAILS` no `.env` ou
+atualize `users.platform_role` diretamente.
 
 ## Variáveis importantes
 
@@ -262,8 +310,16 @@ corepack pnpm build
 corepack pnpm --filter @loopambiental/database db:validate
 ```
 
-A API possui testes unitários. O frontend ainda não possui testes unitários e os
-testes E2E continuam pendentes.
+A API possui testes unitários (Jest) e o frontend possui testes unitários
+(Vitest). Os testes E2E usam Playwright e exigem a stack em execução:
+
+```bash
+corepack pnpm exec playwright install chromium   # uma vez
+corepack pnpm test:e2e
+```
+
+O worker usa `REDIS_URL`. Sem essa variável, ele processa o outbox por polling.
+Com `REDIS_URL`, usa BullMQ. Os e-mails capturados ficam disponíveis no Mailpit.
 
 ## Diagnóstico
 
@@ -309,16 +365,16 @@ apps/web          Frontend Next.js
 apps/worker       Worker de jobs
 packages/database Prisma schema e client
 infra/docker      Containerfiles OCI
+infra/scripts     Script de inicialização (`start.mjs`)
 docker-compose.yml Stack local Docker/Podman
 schema.sql        Provisionamento manual MySQL
 ```
 
 ## Pendências antes de produção
 
-- Worker BullMQ real.
-- Rate limiting e observabilidade completos.
-- Upload seguro com scanner.
-- Testes E2E.
+- Rate limiting, MFA para administradores e observabilidade completos.
+- Upload seguro com scanner assíncrono.
+- Cobrança real das assinaturas e dos desbloqueios avulsos no adapter de pagamento.
 - Validação de pagamentos em sandbox.
 - Backups, retenção e plano de rollback.
 - Revisão jurídica e LGPD.

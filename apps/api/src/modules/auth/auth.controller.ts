@@ -9,6 +9,7 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import {
   AuthService,
@@ -20,11 +21,21 @@ import { readSessionToken } from './session';
 type CredentialsBody = { name?: unknown; email?: unknown; password?: unknown };
 type TokenBody = { token?: unknown; email?: unknown; password?: unknown };
 
+// Sensitive identity endpoints get a tight per-IP budget to blunt credential
+// stuffing, brute force and e-mail bombing.
+const AUTH_THROTTLE = {
+  default: {
+    ttl: 60_000,
+    limit: Number(process.env.AUTH_THROTTLE_LIMIT ?? 20),
+  },
+};
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @Throttle(AUTH_THROTTLE)
   async register(
     @Body() body: CredentialsBody,
     @Req() request: Request,
@@ -42,6 +53,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Throttle(AUTH_THROTTLE)
   @HttpCode(200)
   async login(
     @Body() body: CredentialsBody,
@@ -82,6 +94,7 @@ export class AuthController {
   }
 
   @Post('verify-email')
+  @Throttle(AUTH_THROTTLE)
   async verifyEmail(@Body() body: TokenBody) {
     if (typeof body.token !== 'string' || !body.token)
       throw new BadRequestException('TOKEN_REQUIRED');
@@ -89,6 +102,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @Throttle(AUTH_THROTTLE)
   @HttpCode(200)
   async forgotPassword(@Body() body: TokenBody) {
     if (typeof body.email !== 'string' || !/^\S+@\S+\.\S+$/.test(body.email))
@@ -97,6 +111,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @Throttle(AUTH_THROTTLE)
   async resetPassword(@Body() body: TokenBody) {
     if (
       typeof body.token !== 'string' ||

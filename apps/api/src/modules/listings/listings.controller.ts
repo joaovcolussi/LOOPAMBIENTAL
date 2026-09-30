@@ -8,27 +8,22 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
-import { PrismaService } from '../../infrastructure/prisma.service';
+import { AuthService } from '../auth/auth.service';
+import { readSessionToken } from '../auth/session';
 import { ListingsService } from './listings.service';
-
-const MAX_PAGE_SIZE = 50;
-
-type ListingListResponse = {
-  data: unknown[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
-};
+import {
+  ListingSearchService,
+  normalizeListingSearchFilters,
+} from './listing-search.service';
 
 @Controller('listings')
 export class ListingsController {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly listingsService: ListingsService,
+    private readonly listingSearch: ListingSearchService,
+    private readonly authService: AuthService,
   ) {}
 
   @Get('mine')
@@ -51,8 +46,26 @@ export class ListingsController {
   }
 
   @Get(':slug')
-  async findOne(@Param('slug') slug: string): Promise<{ listing: unknown }> {
-    return { listing: await this.listingsService.findPublishedBySlug(slug) };
+  async findOne(
+    @Req() request: Request,
+    @Param('slug') slug: string,
+  ): Promise<{ listing: unknown }> {
+    const token = readSessionToken(request);
+    let viewerUserId: string | undefined;
+    if (token) {
+      try {
+        const user = await this.authService.getUserByToken(token);
+        viewerUserId = user?.id;
+      } catch {
+        viewerUserId = undefined;
+      }
+    }
+    return {
+      listing: await this.listingsService.findPublishedBySlug(
+        slug,
+        viewerUserId,
+      ),
+    };
   }
 
   @Get('media/:id')
@@ -83,103 +96,38 @@ export class ListingsController {
     @Query('page') pageValue?: string,
     @Query('pageSize') pageSizeValue?: string,
     @Query('q') query?: string,
-    @Query('type') type?: 'BUY' | 'SELL',
+    @Query('type') type?: string,
     @Query('categoryId') categoryId?: string,
     @Query('state') state?: string,
-  ): Promise<ListingListResponse> {
-    const page = this.parsePositiveInteger(pageValue, 1);
-    const pageSize = Math.min(
-      this.parsePositiveInteger(pageSizeValue, 12),
-      MAX_PAGE_SIZE,
-    );
-    const where = {
-      status: 'PUBLISHED' as const,
-      deletedAt: null,
-      ...(type === 'BUY' || type === 'SELL' ? { type } : {}),
-      ...(categoryId ? { categoryId } : {}),
-      ...(state ? { state: state.toUpperCase() } : {}),
-      ...(query?.trim()
-        ? {
-            OR: [
-              {
-                title: { contains: query.trim() },
-              },
-              {
-                description: {
-                  contains: query.trim(),
-                },
-              },
-              {
-                city: { contains: query.trim() },
-              },
-            ],
-          }
-        : {}),
-    };
-
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.listing.findMany({
-        where,
-        orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        select: {
-          id: true,
-          type: true,
-          title: true,
-          slug: true,
-          quantity: true,
-          availableQuantity: true,
-          unit: true,
-          unitPrice: true,
-          currency: true,
-          frequency: true,
-          riskClassification: true,
-          originDetails: true,
-          ownTransport: true,
-          requiresDocuments: true,
-          city: true,
-          state: true,
-          publishedAt: true,
-          createdAt: true,
-          lastAccessAt: true,
-          company: {
-            select: {
-              id: true,
-              tradeName: true,
-              legalName: true,
-              verification: true,
-            },
-          },
-          createdBy: { select: { id: true, name: true } },
-          category: { select: { id: true, name: true, slug: true } },
-          material: { select: { id: true, name: true, slug: true } },
-          media: {
-            where: { status: 'READY' },
-            orderBy: { sortOrder: 'asc' },
-            select: { id: true, altText: true, sortOrder: true },
-          },
-        },
+    @Query('city') city?: string,
+    @Query('verified') verified?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('latitude') latitude?: string,
+    @Query('longitude') longitude?: string,
+    @Query('radiusKm') radiusKm?: string,
+    @Query('sort') sort?: string,
+    @Query('cursor') cursor?: string,
+  ): Promise<unknown> {
+    return this.listingSearch.search({
+      filters: normalizeListingSearchFilters({
+        q: query,
+        type,
+        categoryId,
+        state,
+        city,
+        verified,
+        minPrice,
+        maxPrice,
+        latitude,
+        longitude,
+        radiusKm,
+        sort,
       }),
-      this.prisma.listing.count({ where }),
-    ]);
-    const lastAccessAt = new Date();
-    if (items.length) {
-      await this.prisma.listing.updateMany({
-        where: { id: { in: items.map((item) => item.id) } },
-        data: { lastAccessAt },
-      });
-    }
-
-    return {
-      data: items.map((item) => ({ ...item, lastAccessAt })),
-      pagination: {
-        page,
-        pageSize,
-        total,
-        totalPages: Math.ceil(total / pageSize),
-      },
-    };
+      cursor,
+      page: this.parsePositiveInteger(pageValue, 1),
+      pageSize: this.parsePositiveInteger(pageSizeValue, 12),
+    });
   }
 
   private parsePositiveInteger(value: string | undefined, fallback: number) {

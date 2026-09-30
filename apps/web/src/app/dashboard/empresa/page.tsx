@@ -108,6 +108,12 @@ export default function CompanyPage() {
           <a className="back-link" href="/dashboard">
             <ArrowLeft size={15} /> Voltar ao painel
           </a>
+          <a className="back-link" href="/dashboard/empresa/documentos">
+            Documentos e verificação
+          </a>
+          <a className="back-link" href="/dashboard/empresa/membros">
+            Membros
+          </a>
           <SessionActions mode="dashboard" />
         </div>
       </nav>

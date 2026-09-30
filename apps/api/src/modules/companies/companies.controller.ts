@@ -28,6 +28,8 @@ type CompanyBody = {
   addressDistrict?: unknown;
   addressPostalCode?: unknown;
   contactVisibility?: unknown;
+  latitude?: unknown;
+  longitude?: unknown;
 };
 
 @Controller('companies')
@@ -87,6 +89,8 @@ export class CompaniesController {
     }
     const stringValue = (value: unknown, max: number) =>
       typeof value === 'string' ? value.trim().slice(0, max) : undefined;
+    const latitude = this.parseCoordinate(body.latitude, -90, 90);
+    const longitude = this.parseCoordinate(body.longitude, -180, 180);
     return {
       ...(legalName ? { legalName } : {}),
       tradeName: stringValue(body.tradeName, 200),
@@ -107,6 +111,30 @@ export class CompaniesController {
         body.contactVisibility === 'PUBLIC'
           ? (body.contactVisibility as 'PRIVATE' | 'MEMBERS' | 'PUBLIC')
           : undefined,
+      ...(latitude !== undefined ? { latitude } : {}),
+      ...(longitude !== undefined ? { longitude } : {}),
     };
+  }
+
+  private parseCoordinate(
+    value: unknown,
+    min: number,
+    max: number,
+  ): number | undefined {
+    if (value === undefined) return undefined;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric < min || numeric > max)
+      throw new BadRequestException('INVALID_COORDINATES');
+    return numeric;
+  }
+}
+
+@Controller('companies')
+export class PublicCompaniesController {
+  constructor(private readonly companiesService: CompaniesService) {}
+
+  @Get('public/:slug')
+  async findPublic(@Param('slug') slug: string): Promise<unknown> {
+    return this.companiesService.findPublicBySlug(slug);
   }
 }

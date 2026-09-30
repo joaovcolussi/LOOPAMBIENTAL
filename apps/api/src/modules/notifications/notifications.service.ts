@@ -17,6 +17,10 @@ export class NotificationsService {
         | 'PROPOSAL_REJECTED'
         | 'PROPOSAL_CANCELLED'
         | 'MESSAGE_RECEIVED'
+        | 'COMPANY_VERIFICATION_REQUESTED'
+        | 'COMPANY_VERIFIED'
+        | 'COMPANY_VERIFICATION_REJECTED'
+        | 'SAVED_SEARCH_MATCH'
         | 'SYSTEM';
       title: string;
       body: string;

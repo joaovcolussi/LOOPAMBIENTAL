@@ -108,7 +108,7 @@ export class ConversationsService {
   }
 
   async list(userId: string): Promise<unknown> {
-    return this.prisma.conversation.findMany({
+    const conversations = await this.prisma.conversation.findMany({
       where: { participants: { some: { userId } } },
       orderBy: { updatedAt: 'desc' },
       select: {
@@ -131,6 +131,22 @@ export class ConversationsService {
         },
       },
     });
+    return Promise.all(
+      conversations.map(async (conversation) => {
+        const me = conversation.participants.find(
+          (participant) => participant.userId === userId,
+        );
+        const unreadCount = await this.prisma.message.count({
+          where: {
+            conversationId: conversation.id,
+            deletedAt: null,
+            senderUserId: { not: userId },
+            ...(me?.lastReadAt ? { createdAt: { gt: me.lastReadAt } } : {}),
+          },
+        });
+        return { ...conversation, unreadCount };
+      }),
+    );
   }
 
   async messages(userId: string, conversationId: string): Promise<unknown> {
@@ -181,7 +197,7 @@ export class ConversationsService {
         this.notifications.create(recipient.userId, {
           type: 'MESSAGE_RECEIVED',
           title: 'Nova mensagem',
-          body: 'Voce recebeu uma nova mensagem.',
+          body: 'Você recebeu uma nova mensagem.',
           payload: { conversationId, messageId: message.id },
         }),
       ),

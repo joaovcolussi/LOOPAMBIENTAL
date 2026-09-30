@@ -10,29 +10,40 @@ export default function NotificationsPage() {
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   useEffect(() => {
     api
       .notifications()
       .then(({ notifications: result }) => setNotifications(result))
-      .catch(() => router.replace('/entrar'))
+      .catch(() => router.replace('/entrar?next=/dashboard/notificacoes'))
       .finally(() => setLoading(false));
   }, [router]);
   async function read(id: string) {
-    await api.readNotification(id);
-    setNotifications((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, readAt: new Date().toISOString() } : item,
-      ),
-    );
+    setError('');
+    try {
+      await api.readNotification(id);
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === id ? { ...item, readAt: new Date().toISOString() } : item,
+        ),
+      );
+    } catch {
+      setError('Não foi possível marcar a notificação como lida.');
+    }
   }
   async function readAll() {
-    await api.readAllNotifications();
-    setNotifications((current) =>
-      current.map((item) => ({
-        ...item,
-        readAt: item.readAt || new Date().toISOString(),
-      })),
-    );
+    setError('');
+    try {
+      await api.readAllNotifications();
+      setNotifications((current) =>
+        current.map((item) => ({
+          ...item,
+          readAt: item.readAt || new Date().toISOString(),
+        })),
+      );
+    } catch {
+      setError('Não foi possível marcar todas como lidas.');
+    }
   }
   if (loading)
     return (
@@ -63,6 +74,11 @@ export default function NotificationsPage() {
             <Check size={15} /> Marcar todas como lidas
           </button>
         </div>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
         {notifications.length === 0 ? (
           <div className="empty-panel favorite-empty">
             <Bell size={22} />

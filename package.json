@@ -3,14 +3,19 @@
   "private": true,
   "packageManager": "pnpm@9.15.5",
   "scripts": {
+    "start": "node infra/scripts/start.mjs start",
+    "start:infra": "node infra/scripts/start.mjs infra",
+    "start:db": "node infra/scripts/start.mjs db",
     "dev": "corepack pnpm --parallel --filter ./apps/* dev",
     "build": "corepack pnpm -r --if-present build",
     "lint": "corepack pnpm -r --if-present lint",
     "typecheck": "corepack pnpm -r --if-present typecheck",
     "test": "corepack pnpm -r --if-present test",
+    "test:e2e": "playwright test",
     "format": "prettier --write ."
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "pnpm": "9.15.5",
     "prettier": "^3.5.3",
     "turbo": "^2.4.4",

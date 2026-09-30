@@ -110,7 +110,7 @@ export default function CompaniesPage() {
       <section className="business-steps shell" id="como-funciona">
         <div>
           <p className="eyebrow">como funciona</p>
-          <h2>Da necessidade ao negocio fechado.</h2>
+          <h2>Da necessidade ao negócio fechado.</h2>
         </div>
         <ol>
           <li>

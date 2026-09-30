@@ -115,7 +115,16 @@ export default function MessagesPage() {
                   key={conversation.id}
                   onClick={() => select(conversation)}
                 >
-                  <strong>{conversation.listing?.title || 'Negociação'}</strong>
+                  <span className="conversation-item-top">
+                    <strong>
+                      {conversation.listing?.title || 'Negociação'}
+                    </strong>
+                    {conversation.unreadCount > 0 && (
+                      <i className="conversation-unread">
+                        {conversation.unreadCount}
+                      </i>
+                    )}
+                  </span>
                   <small>
                     {conversation.messages[0]?.body || 'Sem mensagens'}
                   </small>
@@ -139,13 +148,21 @@ export default function MessagesPage() {
                 )}
               </div>
               <form className="message-form" onSubmit={send}>
+                <label className="sr-only" htmlFor="message-body">
+                  Mensagem
+                </label>
                 <input
+                  id="message-body"
                   value={body}
                   onChange={(event) => setBody(event.target.value)}
                   placeholder="Escreva uma mensagem..."
                   maxLength={5000}
                 />
-                <button className="button" disabled={sending}>
+                <button
+                  className="button"
+                  type="submit"
+                  disabled={sending || !body.trim()}
+                >
                   {sending ? 'Enviando...' : 'Enviar'}
                 </button>
               </form>

@@ -15,6 +15,8 @@ import { createHash, randomUUID } from 'node:crypto';
 const sharp = require('sharp') as typeof import('sharp').default;
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
+const DOCUMENT_PREFIX = 'company-documents';
 
 @Injectable()
 export class ListingMediaStorageService {
@@ -51,6 +53,81 @@ export class ListingMediaStorageService {
 
   async uploadCarousel(file: Express.Multer.File) {
     return this.uploadImage(file, 'home-carousel', true);
+  }
+
+  async uploadDocument(file: Express.Multer.File) {
+    if (!file.buffer?.length || file.size > MAX_DOCUMENT_SIZE)
+      throw new BadRequestException('INVALID_DOCUMENT_SIZE');
+    const detected = await this.detectDocument(file.buffer);
+    await this.ensureBucket();
+    const storageKey = `${DOCUMENT_PREFIX}/${randomUUID()}.${detected.extension}`;
+    try {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: storageKey,
+          Body: detected.buffer,
+          ContentLength: detected.buffer.length,
+          ContentType: detected.mimeType,
+          ContentDisposition: 'attachment',
+        }),
+      );
+    } catch {
+      throw new ServiceUnavailableException('STORAGE_UNAVAILABLE');
+    }
+    return {
+      fileName: this.sanitizeFileName(file.originalname),
+      storageKey,
+      mimeType: detected.mimeType,
+      sizeBytes: detected.buffer.length,
+      sha256: createHash('sha256').update(detected.buffer).digest('hex'),
+    };
+  }
+
+  private async detectDocument(buffer: Buffer) {
+    if (buffer.subarray(0, 5).toString('latin1') === '%PDF-') {
+      return {
+        buffer,
+        mimeType: 'application/pdf',
+        extension: 'pdf',
+      };
+    }
+    try {
+      const image = sharp(buffer, {
+        failOn: 'warning',
+        limitInputPixels: 25_000_000,
+      });
+      const metadata = await image.metadata();
+      if (
+        !metadata.format ||
+        !['jpeg', 'png', 'webp'].includes(metadata.format) ||
+        (metadata.pages ?? 1) > 1
+      )
+        throw new Error('UNSUPPORTED_DOCUMENT');
+      const sanitized = await image
+        .rotate()
+        .resize({
+          width: 2200,
+          height: 2200,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .webp({ quality: 84 })
+        .toBuffer();
+      return {
+        buffer: sanitized,
+        mimeType: 'image/webp',
+        extension: 'webp',
+      };
+    } catch {
+      throw new BadRequestException('INVALID_DOCUMENT_TYPE');
+    }
+  }
+
+  private sanitizeFileName(value: string) {
+    const base = value.split(/[\\/]/).pop() ?? 'documento';
+    const clean = base.replace(/[^\w.\- ]+/g, '_').trim();
+    return (clean || 'documento').slice(0, 255);
   }
 
   private async uploadImage(

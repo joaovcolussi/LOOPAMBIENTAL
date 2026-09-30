@@ -6,16 +6,10 @@ import { FormEvent, useEffect, useState } from 'react';
 import { SessionActions } from '../../../../components/session-actions';
 import { api, ListingDetail, listingMediaUrl } from '../../../../lib/api';
 import { formatMoney, formatQuantity } from '../../../../lib/format';
-
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Rascunho',
-  PENDING_REVIEW: 'Em análise',
-  PUBLISHED: 'Publicado',
-  PAUSED: 'Pausado',
-  NEGOTIATING: 'Em negociação',
-  CLOSED: 'Encerrado',
-  REJECTED: 'Rejeitado',
-};
+import {
+  listingReasonLabels,
+  listingStatusLabels,
+} from '../../../../lib/labels';
 
 type OwnedListing = ListingDetail & { status: string };
 
@@ -104,7 +98,7 @@ export default function OwnedListingPage() {
             <span
               className={`admin-user-status ${listing.status.toLowerCase()}`}
             >
-              {statusLabels[listing.status] ?? listing.status}
+              {listingStatusLabels[listing.status] ?? listing.status}
             </span>
           </div>
           {listing.status === 'PUBLISHED' && (
@@ -178,6 +172,35 @@ export default function OwnedListingPage() {
             </p>
           )}
         </article>
+        {listing.statusHistory.length > 0 && (
+          <section className="status-timeline" aria-labelledby="history-title">
+            <h2 id="history-title">Histórico de status</h2>
+            <ol>
+              {listing.statusHistory.map((entry) => (
+                <li key={entry.id}>
+                  <span
+                    className={`status-dot ${entry.toStatus.toLowerCase()}`}
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <strong>
+                      {listingStatusLabels[entry.toStatus] ?? entry.toStatus}
+                    </strong>
+                    <small>
+                      {new Date(entry.createdAt).toLocaleString('pt-BR')}
+                      {entry.actor ? ` · ${entry.actor.name}` : ''}
+                    </small>
+                    {entry.reason && (
+                      <em>
+                        {listingReasonLabels[entry.reason] ?? entry.reason}
+                      </em>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
       </section>
     </main>
   );

@@ -71,7 +71,7 @@ export default function NewListingPage() {
         type,
         title,
         description: description || undefined,
-        quantity,
+        quantity: quantity.replace(',', '.'),
         unit,
         unitPrice: unitPrice || undefined,
         frequency,
@@ -100,6 +100,33 @@ export default function NewListingPage() {
     return (
       <main className="dashboard-page">
         <div className="dashboard-loading">Carregando formulário...</div>
+      </main>
+    );
+  if (!companies.length)
+    return (
+      <main className="dashboard-page">
+        <nav className="dashboard-nav shell">
+          <a className="brand" href="/">
+            <Recycle size={21} /> LOOP <span>AMBIENTAL</span>
+          </a>
+          <div className="dashboard-nav-actions">
+            <a className="back-link" href="/dashboard">
+              <ArrowLeft size={15} /> Voltar ao painel
+            </a>
+            <SessionActions mode="dashboard" />
+          </div>
+        </nav>
+        <section className="company-content shell">
+          <p className="eyebrow">novo anúncio</p>
+          <h1>Crie sua empresa primeiro</h1>
+          <p className="dashboard-lede">
+            Para publicar um anúncio, sua conta precisa estar vinculada a uma
+            empresa. Cadastre os dados da empresa e volte aqui.
+          </p>
+          <a className="button" href="/dashboard/empresa">
+            Criar empresa <ArrowRight size={16} />
+          </a>
+        </section>
       </main>
     );
   return (
@@ -296,10 +323,11 @@ export default function NewListingPage() {
               Quantidade *
               <input
                 required
-                pattern="[0-9]+(\.[0-9]{1,3})?"
+                inputMode="decimal"
+                pattern="[0-9]+([.,][0-9]{1,3})?"
                 value={quantity}
                 onChange={(event) => setQuantity(event.target.value)}
-                placeholder="0.000"
+                placeholder="Ex.: 1000 ou 1000,5"
               />
             </label>
             <label>

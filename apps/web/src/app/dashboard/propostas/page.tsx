@@ -6,15 +6,11 @@ import { useRouter } from 'next/navigation';
 import { api, isAuthenticationError, Proposal } from '../../../lib/api';
 import { SessionActions } from '../../../components/session-actions';
 import { formatMoney, formatQuantity } from '../../../lib/format';
-
-const statusLabels: Record<string, string> = {
-  PENDING: 'Pendente',
-  COUNTERED: 'Contraproposta',
-  ACCEPTED: 'Aceita',
-  REJECTED: 'Rejeitada',
-  CANCELLED: 'Cancelada',
-  EXPIRED: 'Expirada',
-};
+import {
+  dealStatusLabels,
+  label,
+  proposalStatusLabels,
+} from '../../../lib/labels';
 
 export default function ProposalsPage() {
   const router = useRouter();
@@ -76,7 +72,7 @@ export default function ProposalsPage() {
                   <span
                     className={`admin-user-status ${proposal.status.toLowerCase()}`}
                   >
-                    {statusLabels[proposal.status] ?? proposal.status}
+                    {label(proposalStatusLabels, proposal.status)}
                   </span>
                   <h2>{proposal.listing.title}</h2>
                   <p>
@@ -87,7 +83,7 @@ export default function ProposalsPage() {
                   </p>
                   <small>
                     {proposal.deal
-                      ? `Negociação ${proposal.deal.status}`
+                      ? `Negociação · ${label(dealStatusLabels, proposal.deal.status)}`
                       : 'Aguardando resposta'}
                   </small>
                   <a

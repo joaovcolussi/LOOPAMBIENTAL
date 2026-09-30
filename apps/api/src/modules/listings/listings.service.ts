@@ -26,6 +26,8 @@ export type ListingInput = {
   requiresDocuments?: boolean;
   city?: string;
   state?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 const listingSelect = {
@@ -53,7 +55,13 @@ const listingSelect = {
   updatedAt: true,
   lastAccessAt: true,
   company: {
-    select: { id: true, legalName: true, tradeName: true, verification: true },
+    select: {
+      id: true,
+      slug: true,
+      legalName: true,
+      tradeName: true,
+      verification: true,
+    },
   },
   createdBy: { select: { id: true, name: true } },
   category: { select: { id: true, name: true, slug: true } },
@@ -70,6 +78,7 @@ const listingDetailSelect = {
   company: {
     select: {
       id: true,
+      slug: true,
       legalName: true,
       tradeName: true,
       description: true,
@@ -84,6 +93,21 @@ const listingDetailSelect = {
       addressDistrict: true,
       addressPostalCode: true,
       contactVisibility: true,
+    },
+  },
+} as const;
+
+const listingOwnerDetailSelect = {
+  ...listingDetailSelect,
+  statusHistory: {
+    orderBy: { createdAt: 'asc' as const },
+    select: {
+      id: true,
+      fromStatus: true,
+      toStatus: true,
+      reason: true,
+      createdAt: true,
+      actor: { select: { id: true, name: true } },
     },
   },
 } as const;
@@ -118,11 +142,14 @@ export class ListingsService {
     );
     return this.prisma.listing.findUnique({
       where: { id },
-      select: listingDetailSelect,
+      select: listingOwnerDetailSelect,
     });
   }
 
-  async findPublishedBySlug(slug: string): Promise<unknown> {
+  async findPublishedBySlug(
+    slug: string,
+    viewerUserId?: string,
+  ): Promise<unknown> {
     const listing = await this.prisma.listing.findFirst({
       where: { slug, status: 'PUBLISHED', deletedAt: null },
       select: listingDetailSelect,
@@ -134,11 +161,24 @@ export class ListingsService {
       data: { lastAccessAt, viewCount: { increment: 1 } },
     });
     const contactIsPublic = listing.company.contactVisibility === 'PUBLIC';
+    const unlock = viewerUserId
+      ? await this.prisma.contactUnlock.findFirst({
+          where: {
+            listingId: listing.id,
+            company: { members: { some: { userId: viewerUserId } } },
+          },
+          select: { id: true },
+        })
+      : null;
+    const contactUnlocked = contactIsPublic || Boolean(unlock);
     return {
       ...listing,
       lastAccessAt,
+      contactUnlocked,
+      unlockRequired: !contactUnlocked,
       company: {
         id: listing.company.id,
+        slug: listing.company.slug,
         legalName: listing.company.legalName,
         tradeName: listing.company.tradeName,
         description: listing.company.description,
@@ -146,7 +186,7 @@ export class ListingsService {
         state: listing.company.state,
         verification: listing.company.verification,
         contactVisibility: listing.company.contactVisibility,
-        contact: contactIsPublic
+        contact: contactUnlocked
           ? {
               name: listing.company.contactName,
               email: listing.company.contactEmail,
@@ -168,31 +208,45 @@ export class ListingsService {
       input.quantity,
       'INVALID_QUANTITY',
     );
-    return this.prisma.listing.create({
-      data: {
-        companyId: input.companyId,
-        createdByUserId: userId,
-        categoryId: input.categoryId,
-        materialId: input.materialId,
-        type: input.type,
-        title: input.title,
-        slug: `${this.slugify(input.title)}-${randomUUID().slice(0, 8)}`,
-        description: input.description,
-        quantity,
-        availableQuantity: quantity,
-        unit: input.unit,
-        unitPrice: input.unitPrice
-          ? this.parsePositiveDecimal(input.unitPrice, 'INVALID_PRICE', 2, 12)
-          : undefined,
-        frequency: input.frequency,
-        riskClassification: input.riskClassification,
-        originDetails: input.originDetails,
-        ownTransport: input.ownTransport,
-        requiresDocuments: input.requiresDocuments,
-        city: input.city,
-        state: input.state?.toUpperCase(),
-      },
-      select: listingSelect,
+    return this.prisma.$transaction(async (transaction) => {
+      const listing = await transaction.listing.create({
+        data: {
+          companyId: input.companyId,
+          createdByUserId: userId,
+          categoryId: input.categoryId,
+          materialId: input.materialId,
+          type: input.type,
+          title: input.title,
+          slug: `${this.slugify(input.title)}-${randomUUID().slice(0, 8)}`,
+          description: input.description,
+          quantity,
+          availableQuantity: quantity,
+          unit: input.unit,
+          unitPrice: input.unitPrice
+            ? this.parsePositiveDecimal(input.unitPrice, 'INVALID_PRICE', 2, 12)
+            : undefined,
+          frequency: input.frequency,
+          riskClassification: input.riskClassification,
+          originDetails: input.originDetails,
+          ownTransport: input.ownTransport,
+          requiresDocuments: input.requiresDocuments,
+          city: input.city,
+          state: input.state?.toUpperCase(),
+          latitude: input.latitude,
+          longitude: input.longitude,
+        },
+        select: listingSelect,
+      });
+      await transaction.listingStatusHistory.create({
+        data: {
+          listingId: listing.id,
+          fromStatus: null,
+          toStatus: 'DRAFT',
+          actorUserId: userId,
+          reason: 'LISTING_CREATED',
+        },
+      });
+      return listing;
     });
   }
 
@@ -247,6 +301,15 @@ export class ListingsService {
             data: { status: 'PENDING_REVIEW', publishedAt: null },
           });
           await transaction.moderationCase.create({ data: { listingId: id } });
+          await transaction.listingStatusHistory.create({
+            data: {
+              listingId: id,
+              fromStatus: 'PUBLISHED',
+              toStatus: 'PENDING_REVIEW',
+              actorUserId: userId,
+              reason: 'LISTING_MEDIA_ADDED',
+            },
+          });
         }
         return media;
       });
@@ -339,6 +402,20 @@ export class ListingsService {
     const quantity = input.quantity
       ? this.parsePositiveDecimal(input.quantity, 'INVALID_QUANTITY')
       : undefined;
+    // A listing under negotiation has committed stock reserved by the accepted
+    // proposal. Allowing quantity/type/price edits here would re-inflate the
+    // available quantity and enable overselling, so those fields are frozen
+    // until the deal is settled or cancelled.
+    if (
+      listing.status === 'NEGOTIATING' &&
+      (input.type !== undefined ||
+        input.quantity !== undefined ||
+        input.unit !== undefined ||
+        input.unitPrice !== undefined ||
+        input.categoryId !== undefined ||
+        input.materialId !== undefined)
+    )
+      throw new BadRequestException('LISTING_UNDER_NEGOTIATION');
     return this.prisma.$transaction(async (transaction) => {
       const changed = await transaction.listing.updateMany({
         where: { id, status: listing.status },
@@ -388,6 +465,10 @@ export class ListingsService {
           ...(input.state !== undefined
             ? { state: input.state.toUpperCase() }
             : {}),
+          ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
+          ...(input.longitude !== undefined
+            ? { longitude: input.longitude }
+            : {}),
           ...(listing.status === 'PUBLISHED'
             ? { status: 'PENDING_REVIEW', publishedAt: null }
             : {}),
@@ -395,8 +476,18 @@ export class ListingsService {
       });
       if (changed.count !== 1)
         throw new ConflictException('LISTING_STATE_CHANGED');
-      if (listing.status === 'PUBLISHED')
+      if (listing.status === 'PUBLISHED') {
         await transaction.moderationCase.create({ data: { listingId: id } });
+        await transaction.listingStatusHistory.create({
+          data: {
+            listingId: id,
+            fromStatus: 'PUBLISHED',
+            toStatus: 'PENDING_REVIEW',
+            actorUserId: userId,
+            reason: 'LISTING_EDITED',
+          },
+        });
+      }
       return transaction.listing.findUniqueOrThrow({
         where: { id },
         select: listingSelect,
@@ -421,6 +512,15 @@ export class ListingsService {
       if (changed.count !== 1)
         throw new ConflictException('LISTING_STATE_CHANGED');
       await transaction.moderationCase.create({ data: { listingId: id } });
+      await transaction.listingStatusHistory.create({
+        data: {
+          listingId: id,
+          fromStatus: listing.status,
+          toStatus: 'PENDING_REVIEW',
+          actorUserId: userId,
+          reason: 'LISTING_SUBMITTED',
+        },
+      });
       return transaction.listing.findUniqueOrThrow({
         where: { id },
         select: listingSelect,
@@ -437,10 +537,22 @@ export class ListingsService {
     );
     if (listing.status !== 'PUBLISHED' && listing.status !== 'NEGOTIATING')
       throw new BadRequestException('INVALID_LISTING_TRANSITION');
-    return this.prisma.listing.update({
-      where: { id },
-      data: { status: 'PAUSED' },
-      select: listingSelect,
+    return this.prisma.$transaction(async (transaction) => {
+      const updated = await transaction.listing.update({
+        where: { id },
+        data: { status: 'PAUSED' },
+        select: listingSelect,
+      });
+      await transaction.listingStatusHistory.create({
+        data: {
+          listingId: id,
+          fromStatus: listing.status,
+          toStatus: 'PAUSED',
+          actorUserId: userId,
+          reason: 'LISTING_PAUSED',
+        },
+      });
+      return updated;
     });
   }
 
@@ -453,10 +565,22 @@ export class ListingsService {
     );
     if (listing.status === 'CLOSED' || listing.status === 'ARCHIVED')
       throw new BadRequestException('INVALID_LISTING_TRANSITION');
-    return this.prisma.listing.update({
-      where: { id },
-      data: { status: 'CLOSED' },
-      select: listingSelect,
+    return this.prisma.$transaction(async (transaction) => {
+      const updated = await transaction.listing.update({
+        where: { id },
+        data: { status: 'CLOSED' },
+        select: listingSelect,
+      });
+      await transaction.listingStatusHistory.create({
+        data: {
+          listingId: id,
+          fromStatus: listing.status,
+          toStatus: 'CLOSED',
+          actorUserId: userId,
+          reason: 'LISTING_CLOSED',
+        },
+      });
+      return updated;
     });
   }
 

@@ -55,6 +55,7 @@ describe('ListingsService', () => {
         }),
       },
       moderationCase: { create: jest.fn().mockResolvedValue({}) },
+      listingStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
       listing: {
@@ -108,5 +109,43 @@ describe('ListingsService', () => {
       'LISTING_STATE_CHANGED',
     );
     expect(transaction.moderationCase.create).not.toHaveBeenCalled();
+  });
+
+  it('records a status history entry when submitting', async () => {
+    const transaction = {
+      listing: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ id: 'listing-id', status: 'PENDING_REVIEW' }),
+      },
+      moderationCase: { create: jest.fn().mockResolvedValue({}) },
+      listingStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      listing: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'listing-id',
+          companyId: 'company-id',
+          createdByUserId: 'user-id',
+          status: 'DRAFT',
+        }),
+      },
+      companyMember: {
+        findUnique: jest.fn().mockResolvedValue({ role: 'OWNER' }),
+      },
+      $transaction: jest.fn((callback) => callback(transaction)),
+    };
+    const service = new ListingsService(prisma as never, {} as never);
+
+    await service.submit('user-id', 'listing-id');
+
+    expect(transaction.listingStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        listingId: 'listing-id',
+        fromStatus: 'DRAFT',
+        toStatus: 'PENDING_REVIEW',
+      }),
+    });
   });
 });

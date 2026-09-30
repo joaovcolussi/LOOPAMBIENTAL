@@ -1,16 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, Recycle, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { api, ModerationCase, moderationMediaUrl } from '../../../lib/api';
-import { SessionActions } from '../../../components/session-actions';
+import { AdminNav } from '../../../components/admin-nav';
+import { ConfirmDialog } from '../../../components/confirm-dialog';
 import { formatMoney, formatQuantity } from '../../../lib/format';
+import { label, listingTypeLabels } from '../../../lib/labels';
 
 export default function ModerationPage() {
   const [cases, setCases] = useState<ModerationCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actingId, setActingId] = useState('');
+  const [rejectTarget, setRejectTarget] = useState<ModerationCase | null>(null);
 
   useEffect(() => {
     api
@@ -36,9 +39,9 @@ export default function ModerationPage() {
       setActingId('');
     }
   }
-  async function reject(item: ModerationCase) {
-    const reason = window.prompt('Informe o motivo da rejeição:');
-    if (!reason) return;
+  async function confirmReject(reason: string) {
+    const item = rejectTarget;
+    if (!item) return;
     setActingId(item.id);
     setError('');
     try {
@@ -46,6 +49,7 @@ export default function ModerationPage() {
       setCases((current) =>
         current.filter((currentItem) => currentItem.id !== item.id),
       );
+      setRejectTarget(null);
     } catch {
       setError(
         'Não foi possível rejeitar. Confira o motivo ou atualize a fila.',
@@ -63,17 +67,7 @@ export default function ModerationPage() {
     );
   return (
     <main className="dashboard-page">
-      <nav className="dashboard-nav shell">
-        <a className="brand" href="/">
-          <Recycle size={21} /> LOOP <span>AMBIENTAL</span>
-        </a>
-        <div className="nav-actions">
-          <a className="back-link" href="/dashboard">
-            Voltar ao painel
-          </a>
-          <SessionActions mode="dashboard" />
-        </div>
-      </nav>
+      <AdminNav />
       <section className="dashboard-content shell">
         <p className="eyebrow">administração</p>
         <h1>Fila de moderação</h1>
@@ -106,7 +100,9 @@ export default function ModerationPage() {
                       ))}
                     </div>
                   )}
-                  <span className="dashboard-number">{item.listing.type}</span>
+                  <span className="dashboard-number">
+                    {label(listingTypeLabels, item.listing.type)}
+                  </span>
                   <h2>{item.listing.title}</h2>
                   <p>
                     {item.listing.company.tradeName ||
@@ -166,7 +162,7 @@ export default function ModerationPage() {
                   <button
                     className="reject-button"
                     disabled={actingId === item.id}
-                    onClick={() => reject(item)}
+                    onClick={() => setRejectTarget(item)}
                   >
                     <X size={15} /> Rejeitar
                   </button>
@@ -176,6 +172,23 @@ export default function ModerationPage() {
           )}
         </div>
       </section>
+      <ConfirmDialog
+        open={Boolean(rejectTarget)}
+        title="Rejeitar anúncio"
+        description={
+          rejectTarget
+            ? `Informe o motivo da rejeição de “${rejectTarget.listing.title}”. O motivo fica registrado para a empresa.`
+            : undefined
+        }
+        confirmLabel="Rejeitar anúncio"
+        tone="danger"
+        requireReason
+        reasonLabel="Motivo da rejeição"
+        reasonPlaceholder="Descreva o que precisa ser corrigido"
+        pending={Boolean(rejectTarget) && actingId === rejectTarget?.id}
+        onConfirm={confirmReject}
+        onCancel={() => setRejectTarget(null)}
+      />
     </main>
   );
 }

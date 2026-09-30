@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, typecheck, tests and build
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: mysql://loopambiental:loopambiental_local@127.0.0.1:3306/loopambiental
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3001/api/v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @loopambiental/database generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    needs: quality
+    env:
+      DATABASE_URL: mysql://loopambiental:loopambiental_local@127.0.0.1:3306/loopambiental
+      REDIS_URL: redis://127.0.0.1:6379
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3001/api/v1
+      WEB_ORIGIN: http://127.0.0.1:3000
+      WEB_PUBLIC_URL: http://127.0.0.1:3000
+      ADMIN_EMAILS: admin@loopambiental.com
+      FIELD_ENCRYPTION_KEY: ci-field-encryption-key
+      E2E_BASE_URL: http://127.0.0.1:3000
+      E2E_API_URL: http://127.0.0.1:3001/api/v1
+      E2E_WEB_ORIGIN: http://127.0.0.1:3000
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: loopambiental
+          MYSQL_USER: loopambiental
+          MYSQL_PASSWORD: loopambiental_local
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @loopambiental/database generate
+
+      - name: Apply migrations
+        run: pnpm --filter @loopambiental/database db:deploy
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start API
+        run: pnpm --filter @loopambiental/api dev > api.log 2>&1 &
+
+      - name: Start web
+        run: pnpm --filter @loopambiental/web dev > web.log 2>&1 &
+
+      - name: Wait for API and web
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3001/api/v1/health >/dev/null; then break; fi
+            sleep 2
+          done
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000 >/dev/null; then break; fi
+            sleep 2
+          done
+
+      - name: Run Playwright tests
+        run: pnpm test:e2e
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            api.log
+            web.log
+            playwright-report
+            test-results
+          if-no-files-found: ignore

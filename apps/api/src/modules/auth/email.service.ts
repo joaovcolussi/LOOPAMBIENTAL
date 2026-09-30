@@ -28,4 +28,19 @@ export class EmailService {
       text: `Redefina sua senha: ${this.publicUrl}/redefinir-senha?token=${token}`,
     });
   }
+  async sendCompanyInvitation(
+    email: string,
+    companyName: string,
+    inviterName: string,
+    token: string,
+  ) {
+    return this.transporter.sendMail({
+      from: this.from,
+      to: email,
+      subject: `Convite para participar de ${companyName} na LOOP AMBIENTAL`,
+      text:
+        `${inviterName} convidou você para participar de ${companyName} na LOOP AMBIENTAL.\n` +
+        `Aceite o convite: ${this.publicUrl}/convite/${token}`,
+    });
+  }
 }

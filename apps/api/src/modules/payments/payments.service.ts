@@ -7,13 +7,17 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
+import { OutboxService } from '../../infrastructure/outbox.service';
 import { MercadoPagoAdapter } from './mercado-pago.adapter';
 
 @Injectable()
 export class PaymentsService {
   private readonly mercadoPago = new MercadoPagoAdapter();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly outbox: OutboxService,
+  ) {}
 
   async createCheckout(
     userId: string,
@@ -96,6 +100,15 @@ export class PaymentsService {
         where: { id: dealId },
         data: { status: 'AWAITING_PAYMENT' },
       });
+      await this.prisma.dealStatusHistory.create({
+        data: {
+          dealId,
+          fromStatus: deal.status,
+          toStatus: 'AWAITING_PAYMENT',
+          actorUserId: userId,
+          note: 'CHECKOUT_CREATED',
+        },
+      });
       return payment;
     } catch (error) {
       try {
@@ -155,26 +168,55 @@ export class PaymentsService {
     const status = this.mapStatus(payment.status);
     const transaction = await this.prisma.paymentTransaction.findUnique({
       where: { id: payment.external_reference },
-      select: { id: true, dealId: true },
-    });
-    if (!transaction) return { received: true };
-    await this.prisma.paymentTransaction.update({
-      where: { id: payment.external_reference },
-      data: {
-        status,
-        metadata: {
-          mercadoPagoPaymentId: payment.id ?? dataId,
-          mercadoPagoStatus: payment.status,
-        },
-        ...(status === 'PAID' ? { paidAt: new Date() } : {}),
+      select: {
+        id: true,
+        dealId: true,
+        companyId: true,
+        deal: { select: { status: true } },
       },
     });
-    if (status === 'PAID') {
-      await this.prisma.deal.update({
+    if (!transaction) return { received: true };
+    // Idempotency: settle a transaction exactly once. A replayed webhook (or a
+    // concurrent one) cannot reapply the deal transition or enqueue a duplicate
+    // event, and all writes share a single transaction.
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.paymentTransaction.updateMany({
+        where: { id: payment.external_reference, status: { not: 'PAID' } },
+        data: {
+          status,
+          metadata: {
+            mercadoPagoPaymentId: payment.id ?? dataId,
+            mercadoPagoStatus: payment.status,
+          },
+          ...(status === 'PAID' ? { paidAt: new Date() } : {}),
+        },
+      });
+      if (claimed.count === 0) return;
+      if (status !== 'PAID') return;
+      await tx.deal.update({
         where: { id: transaction.dealId },
         data: { status: 'AWAITING_PICKUP' },
       });
-    }
+      await tx.dealStatusHistory.create({
+        data: {
+          dealId: transaction.dealId,
+          fromStatus: transaction.deal.status,
+          toStatus: 'AWAITING_PICKUP',
+          actorUserId: null,
+          note: 'PAYMENT_CONFIRMED',
+        },
+      });
+      await this.outbox.enqueueWithin(tx, {
+        type: 'payment.confirmed',
+        aggregateType: 'PAYMENT_TRANSACTION',
+        aggregateId: transaction.id,
+        payload: {
+          paymentId: transaction.id,
+          dealId: transaction.dealId,
+          companyId: transaction.companyId,
+        },
+      });
+    });
     return { received: true };
   }
 

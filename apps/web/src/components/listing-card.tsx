@@ -4,13 +4,9 @@ import { ArrowRight, BadgeCheck, MapPin } from 'lucide-react';
 import { FavoriteButton } from './favorite-button';
 import { ListingCard as ListingCardType, listingMediaUrl } from '../lib/api';
 import { formatMoney, formatQuantity } from '../lib/format';
+import { listingFrequencyLabels } from '../lib/labels';
 
-const frequencyLabels: Record<string, string> = {
-  ONE_TIME: 'operação única',
-  WEEKLY: 'semanal',
-  MONTHLY: 'mensal',
-  CONTINUOUS: 'contínuo',
-};
+const DEFAULT_IMAGE = '/products/generico.svg';
 
 const categoryImages: Record<string, string> = {
   plastico: '/products/pet.svg',
@@ -18,10 +14,11 @@ const categoryImages: Record<string, string> = {
   'papel-papelao': '/products/papelao.svg',
   vidro: '/products/vidro.svg',
   madeira: '/products/madeira.svg',
+  'cabos-de-cobre': '/products/cobre.svg',
 };
 
 type Props = {
-  listing: ListingCardType;
+  listing: ListingCardType & { distanceKm?: number | null };
   initialFavorite?: boolean;
   showFavorite?: boolean;
   ownerView?: boolean;
@@ -53,7 +50,7 @@ export function ListingCard({
           src={
             image
               ? listingMediaUrl(image.id, ownerView)
-              : categoryImages[listing.category.slug] || '/products/pet.svg'
+              : categoryImages[listing.category.slug] || DEFAULT_IMAGE
           }
           alt={
             image?.altText ||
@@ -69,7 +66,16 @@ export function ListingCard({
       </a>
       <div className="listing-body">
         <div className="listing-meta">
-          <span>{company}</span>
+          {listing.company.slug ? (
+            <a
+              className="listing-company-link"
+              href={`/empresas/${listing.company.slug}`}
+            >
+              {company}
+            </a>
+          ) : (
+            <span>{company}</span>
+          )}
           {listing.company.verification === 'VERIFIED' && (
             <span className="verified">
               <BadgeCheck size={13} /> verificada
@@ -91,14 +97,24 @@ export function ListingCard({
           <span>
             <MapPin size={14} /> {listing.city || 'Local não informado'}
             {listing.state ? `, ${listing.state}` : ''}
+            {typeof listing.distanceKm === 'number'
+              ? ` · ${listing.distanceKm} km`
+              : ''}
           </span>
         </div>
         <div className="listing-card-price">
           <strong>{price}</strong>
-          <span>{frequencyLabels[listing.frequency] || listing.frequency}</span>
+          <span>
+            {listingFrequencyLabels[listing.frequency] || listing.frequency}
+          </span>
         </div>
         <div className="listing-footer">
-          <span>{listing.material?.name || listing.category.name}</span>
+          <a
+            className="listing-category-link"
+            href={`/categorias/${listing.category.slug}`}
+          >
+            {listing.material?.name || listing.category.name}
+          </a>
           <div className="listing-actions">
             {showFavorite && (
               <FavoriteButton

@@ -29,11 +29,20 @@ export default function ForgotPasswordPage() {
         {sent ? (
           <p className="auth-subtitle">
             Se o e-mail estiver cadastrado, enviaremos um link de redefinição.
-            Em desenvolvimento, consulte a mensagem no Mailpit em{' '}
-            <a href="http://localhost:8025" target="_blank" rel="noreferrer">
-              localhost:8025
-            </a>
-            .
+            {process.env.NODE_ENV !== 'production' && (
+              <>
+                {' '}
+                Em desenvolvimento, consulte a mensagem no Mailpit em{' '}
+                <a
+                  href="http://localhost:8025"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  localhost:8025
+                </a>
+                .
+              </>
+            )}
           </p>
         ) : (
           <>

@@ -18,6 +18,9 @@ import { EmailService } from './email.service';
 const scrypt = promisify(nodeScrypt);
 export const SESSION_COOKIE = 'loopambiental_session';
 export const SESSION_IDLE_SECONDS = 20 * 60;
+// A session cannot be refreshed beyond this absolute lifetime, even if the user
+// stays active, so a stolen cookie eventually stops working.
+export const SESSION_ABSOLUTE_SECONDS = 30 * 24 * 60 * 60;
 
 type SessionContext = { userAgent?: string; ipAddress?: string };
 
@@ -150,9 +153,12 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
     });
-    const validPassword = user?.passwordHash
-      ? await this.verifyPassword(password, user.passwordHash)
-      : false;
+    // Always run a password verification to avoid a timing oracle that reveals
+    // whether the account exists.
+    const validPassword = await this.verifyPassword(
+      password,
+      user?.passwordHash ?? (await this.dummyPasswordHash()),
+    );
     if (!user || !validPassword || user.status !== 'ACTIVE')
       throw new UnauthorizedException('INVALID_CREDENTIALS');
 
@@ -181,25 +187,33 @@ export class AuthService {
             email: true,
             status: true,
             platformRole: true,
+            emailVerifiedAt: true,
             createdAt: true,
           },
         },
       },
     });
+    const now = Date.now();
     if (
       !session ||
-      session.expiresAt <= new Date() ||
+      session.expiresAt <= new Date(now) ||
+      session.absoluteExpiresAt <= new Date(now) ||
       session.user.status !== 'ACTIVE'
     )
       return null;
 
     // Sessions use a sliding idle timeout: every authenticated request grants
-    // another 20 minutes, while an idle browser session expires naturally.
+    // another 20 minutes, while an idle browser session expires naturally. The
+    // refresh can never extend past the absolute session lifetime.
+    const nextExpiry = new Date(
+      Math.min(
+        now + SESSION_IDLE_SECONDS * 1000,
+        session.absoluteExpiresAt.getTime(),
+      ),
+    );
     const refreshed = await this.prisma.session.updateMany({
       where: { id: session.id, tokenHash: this.hashToken(token) },
-      data: {
-        expiresAt: new Date(Date.now() + SESSION_IDLE_SECONDS * 1000),
-      },
+      data: { expiresAt: nextExpiry },
     });
     if (refreshed.count === 0) return null;
     return session.user;
@@ -212,19 +226,25 @@ export class AuthService {
   }
 
   async revokeExpiredSessions() {
+    const now = new Date();
     await this.prisma.session.deleteMany({
-      where: { expiresAt: { lte: new Date() } },
+      where: {
+        OR: [{ expiresAt: { lte: now } }, { absoluteExpiresAt: { lte: now } }],
+      },
     });
   }
 
   private async createSession(userId: string, context: SessionContext) {
     const token = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(Date.now() + SESSION_IDLE_SECONDS * 1000);
+    const now = Date.now();
+    const expiresAt = new Date(now + SESSION_IDLE_SECONDS * 1000);
+    const absoluteExpiresAt = new Date(now + SESSION_ABSOLUTE_SECONDS * 1000);
     await this.prisma.session.create({
       data: {
         userId,
         tokenHash: this.hashToken(token),
         expiresAt,
+        absoluteExpiresAt,
         userAgent: context.userAgent,
         ipAddress: context.ipAddress,
       },
@@ -237,6 +257,14 @@ export class AuthService {
     const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
     return `scrypt$${salt}$${derivedKey.toString('hex')}`;
   }
+
+  // A syntactically valid hash with the same scrypt cost, used only to keep the
+  // login response time constant for unknown accounts.
+  private async dummyPasswordHash() {
+    if (!this.dummyHash) this.dummyHash = await this.hashPassword('unused');
+    return this.dummyHash;
+  }
+  private dummyHash: string | null = null;
 
   private async verifyPassword(password: string, storedHash: string) {
     const [, salt, storedKey] = storedHash.split('$');

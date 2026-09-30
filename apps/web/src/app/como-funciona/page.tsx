@@ -58,7 +58,7 @@ export default function HowItWorksPage() {
         <p className="eyebrow">
           <span /> simples para começar
         </p>
-        <h1>Do material parado ao negocio em movimento.</h1>
+        <h1>Do material parado ao negócio em movimento.</h1>
         <p>
           A LOOP AMBIENTAL aproxima empresas que precisam comprar de empresas
           que possuem resíduos e subprodutos para vender, com contexto

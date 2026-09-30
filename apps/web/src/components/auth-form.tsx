@@ -25,7 +25,16 @@ export function AuthForm({ mode }: AuthFormProps) {
         mode === 'register'
           ? await api.register({ name, email, password })
           : await api.login({ email, password });
-      const next = new URLSearchParams(window.location.search).get('next');
+      const requestedNext = new URLSearchParams(window.location.search).get(
+        'next',
+      );
+      // Only allow same-site relative paths to avoid open redirects.
+      const next =
+        requestedNext &&
+        requestedNext.startsWith('/') &&
+        !requestedNext.startsWith('//')
+          ? requestedNext
+          : null;
       router.push(
         next ||
           (mode === 'login' &&

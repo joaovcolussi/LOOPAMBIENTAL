@@ -24,7 +24,7 @@ export default function PaymentsPage() {
     api
       .payments()
       .then(({ payments: result }) => setPayments(result))
-      .catch(() => router.replace('/entrar'))
+      .catch(() => router.replace('/entrar?next=/dashboard/pagamentos'))
       .finally(() => setLoading(false));
   }, [router]);
   if (loading)

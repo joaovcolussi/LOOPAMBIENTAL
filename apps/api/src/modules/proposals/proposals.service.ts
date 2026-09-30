@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/prisma.service';
+import { OutboxService } from '../../infrastructure/outbox.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 type ProposalInput = {
@@ -53,13 +54,31 @@ const proposalSelect = {
       createdAt: true,
     },
   },
-  deal: { select: { id: true, status: true, createdAt: true } },
+  deal: {
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      statusHistory: {
+        orderBy: { createdAt: 'asc' as const },
+        select: {
+          id: true,
+          fromStatus: true,
+          toStatus: true,
+          note: true,
+          createdAt: true,
+          actor: { select: { id: true, name: true } },
+        },
+      },
+    },
+  },
 } as const;
 
 @Injectable()
 export class ProposalsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly outbox: OutboxService,
     private readonly notifications: NotificationsService,
   ) {}
 
@@ -231,7 +250,7 @@ export class ProposalsService {
       });
       if (reserved.count !== 1)
         throw new ConflictException('LISTING_NO_LONGER_AVAILABLE');
-      return transaction.deal.create({
+      const deal = await transaction.deal.create({
         data: {
           listingId: proposal.listingId,
           proposalId: id,
@@ -246,6 +265,37 @@ export class ProposalsService {
           createdAt: true,
         },
       });
+      await transaction.listingStatusHistory.create({
+        data: {
+          listingId: proposal.listingId,
+          fromStatus: 'PUBLISHED',
+          toStatus: 'NEGOTIATING',
+          actorUserId: userId,
+          reason: 'PROPOSAL_ACCEPTED',
+        },
+      });
+      await transaction.dealStatusHistory.create({
+        data: {
+          dealId: deal.id,
+          fromStatus: null,
+          toStatus: 'OPEN',
+          actorUserId: userId,
+          note: 'DEAL_CREATED',
+        },
+      });
+      await this.outbox.enqueueWithin(transaction, {
+        type: 'deal.created',
+        aggregateType: 'DEAL',
+        aggregateId: deal.id,
+        payload: {
+          dealId: deal.id,
+          listingId: proposal.listingId,
+          proposalId: id,
+          buyerCompanyId,
+          sellerCompanyId,
+        },
+      });
+      return deal;
     });
     if (!deal) {
       const concurrentDeal = await this.prisma.deal.findUnique({

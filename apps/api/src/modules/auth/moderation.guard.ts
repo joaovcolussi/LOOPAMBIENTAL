@@ -14,10 +14,13 @@ export class ModerationGuard implements CanActivate {
       .split(',')
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean);
+    const isConfiguredAdmin =
+      request.user.emailVerifiedAt !== null &&
+      configuredAdmins.includes(request.user.email.toLowerCase());
     if (
       request.user.platformRole !== 'ADMIN' &&
       request.user.platformRole !== 'MODERATOR' &&
-      !configuredAdmins.includes(request.user.email.toLowerCase())
+      !isConfiguredAdmin
     )
       throw new ForbiddenException('MODERATION_ACCESS_REQUIRED');
     return true;
