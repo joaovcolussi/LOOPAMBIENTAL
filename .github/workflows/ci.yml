@@ -46,6 +46,19 @@ jobs:
       - name: Build
         run: pnpm build
 
+  images:
+    name: Container images
+    runs-on: ubuntu-latest
+    needs: quality
+    strategy:
+      matrix:
+        app: [api, worker, web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.app }} image
+        run: docker build -f infra/docker/Containerfile.${{ matrix.app }} -t loopambiental-${{ matrix.app }}:ci .
+
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
