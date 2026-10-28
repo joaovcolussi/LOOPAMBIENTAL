@@ -7,6 +7,18 @@ import {
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
+// Participant rows alone are not enough: a user removed from the company must
+// lose access to its negotiation threads, so current membership in either side
+// (listing owner or proposer) is checked on every access.
+function currentMemberOfEitherSide(userId: string) {
+  return {
+    OR: [
+      { listing: { company: { members: { some: { userId } } } } },
+      { proposal: { proposerCompany: { members: { some: { userId } } } } },
+    ],
+  };
+}
+
 @Injectable()
 export class ConversationsService {
   constructor(
@@ -109,7 +121,10 @@ export class ConversationsService {
 
   async list(userId: string): Promise<unknown> {
     const conversations = await this.prisma.conversation.findMany({
-      where: { participants: { some: { userId } } },
+      where: {
+        participants: { some: { userId } },
+        ...currentMemberOfEitherSide(userId),
+      },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
@@ -215,10 +230,15 @@ export class ConversationsService {
   }
 
   private async assertParticipant(userId: string, conversationId: string) {
-    const participant = await this.prisma.conversationParticipant.findUnique({
-      where: { conversationId_userId: { conversationId, userId } },
+    const conversation = await this.prisma.conversation.findFirst({
+      where: {
+        id: conversationId,
+        participants: { some: { userId } },
+        ...currentMemberOfEitherSide(userId),
+      },
+      select: { id: true },
     });
-    if (!participant)
+    if (!conversation)
       throw new ForbiddenException('CONVERSATION_ACCESS_DENIED');
   }
 }

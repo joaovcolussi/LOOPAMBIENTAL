@@ -14,7 +14,7 @@ import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { AuthService } from '../auth/auth.service';
 import { readSessionToken } from '../auth/session';
 import { ListingsService } from './listings.service';
-import { attachmentDisposition } from '../../common/content-disposition';
+import { privateDownload } from '../../common/content-disposition';
 import {
   ListingSearchService,
   normalizeListingSearchFilters,
@@ -93,44 +93,32 @@ export class ListingsController {
     return new StreamableFile(media.buffer, { type: media.mimeType });
   }
 
-  // Reports can carry commercially sensitive data, so downloads of published
-  // listing documents require an authenticated account (no anonymous scraping).
+  // Reports can carry commercially sensitive data, so downloads require an
+  // authenticated account (no anonymous scraping).
   @Get('documents/:id')
   @UseGuards(AuthGuard)
-  @Header('Cache-Control', 'private, no-store')
-  @Header('X-Content-Type-Options', 'nosniff')
-  @Header('Content-Security-Policy', "sandbox; default-src 'none'")
   async document(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const document = await this.listingsService.readPublishedDocument(id);
-    response.setHeader(
-      'Content-Disposition',
-      attachmentDisposition(document.fileName),
+    return privateDownload(
+      response,
+      await this.listingsService.readPublishedDocument(request.user.id, id),
     );
-    return new StreamableFile(document.buffer, { type: document.mimeType });
   }
 
   @Get('documents/:id/owner')
   @UseGuards(AuthGuard)
-  @Header('Cache-Control', 'private, no-store')
-  @Header('X-Content-Type-Options', 'nosniff')
-  @Header('Content-Security-Policy', "sandbox; default-src 'none'")
   async ownedDocument(
     @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const document = await this.listingsService.readOwnedDocument(
-      request.user.id,
-      id,
+    return privateDownload(
+      response,
+      await this.listingsService.readOwnedDocument(request.user.id, id),
     );
-    response.setHeader(
-      'Content-Disposition',
-      attachmentDisposition(document.fileName),
-    );
-    return new StreamableFile(document.buffer, { type: document.mimeType });
   }
 
   @Get()

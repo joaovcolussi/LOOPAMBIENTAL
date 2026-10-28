@@ -32,7 +32,11 @@ export class CompanyDocumentController {
 
   @Post(':id/documents')
   @UseInterceptors(
-    FileInterceptor('document', { limits: { fileSize: MAX_DOCUMENT_SIZE } }),
+    FileInterceptor('document', {
+      limits: { fileSize: MAX_DOCUMENT_SIZE },
+      // Browsers send UTF-8 file names; busboy defaults to latin1.
+      defParamCharset: 'utf8',
+    }),
   )
   async upload(
     @Req() request: AuthenticatedRequest,

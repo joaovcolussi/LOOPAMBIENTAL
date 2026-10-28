@@ -56,7 +56,7 @@ export const listingDocumentSelect = {
   createdAt: true,
 } as const;
 
-const activeDocumentsWhere = {
+export const activeDocumentsWhere = {
   status: 'READY' as const,
   deletedAt: null,
 };
@@ -421,10 +421,13 @@ export class ListingsService {
       throw new BadRequestException('LISTING_NOT_EDITABLE');
     if (!file) throw new BadRequestException('DOCUMENT_REQUIRED');
     const validUntil = this.parseOptionalDate(input.validUntil);
-    const existingCount = await this.prisma.listingDocument.count({
-      where: { listingId: id, ...activeDocumentsWhere },
-    });
-    if (existingCount >= MAX_LISTING_DOCUMENTS)
+    // Cheap pre-check before the upload; the authoritative check runs again
+    // under the listing row lock below.
+    if (
+      (await this.prisma.listingDocument.count({
+        where: { listingId: id, ...activeDocumentsWhere },
+      })) >= MAX_LISTING_DOCUMENTS
+    )
       throw new BadRequestException('DOCUMENT_LIMIT_EXCEEDED');
 
     const upload = await this.mediaStorage.uploadDocument(
@@ -433,6 +436,13 @@ export class ListingsService {
     );
     try {
       return await this.prisma.$transaction(async (transaction) => {
+        // Serializes concurrent uploads to the same listing so the limit holds.
+        await transaction.$queryRaw`SELECT id FROM listings WHERE id = ${id} FOR UPDATE`;
+        const existing = await transaction.listingDocument.count({
+          where: { listingId: id, ...activeDocumentsWhere },
+        });
+        if (existing >= MAX_LISTING_DOCUMENTS)
+          throw new BadRequestException('DOCUMENT_LIMIT_EXCEEDED');
         const document = await transaction.listingDocument.create({
           data: {
             listingId: id,
@@ -471,20 +481,49 @@ export class ListingsService {
     );
     if (listing.status === 'CLOSED' || listing.status === 'ARCHIVED')
       throw new BadRequestException('LISTING_NOT_EDITABLE');
-    // Soft delete: the report may back an existing negotiation, so the file
-    // and its metadata are retained for audit but no longer listed or served.
-    const removed = await this.prisma.listingDocument.updateMany({
-      where: { id: documentId, listingId, deletedAt: null },
-      data: { deletedAt: new Date() },
+    await this.prisma.$transaction(async (transaction) => {
+      // Soft delete: the report may back an existing negotiation, so the file
+      // and its metadata are retained for audit but no longer listed or served.
+      const removed = await transaction.listingDocument.updateMany({
+        where: { id: documentId, listingId, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+      if (removed.count !== 1)
+        throw new NotFoundException('LISTING_DOCUMENT_NOT_FOUND');
+      // The listing may have been approved because of this report.
+      if (listing.status === 'PUBLISHED')
+        await this.returnToReview(
+          transaction,
+          listingId,
+          userId,
+          'LISTING_DOCUMENT_REMOVED',
+        );
     });
-    if (removed.count !== 1)
-      throw new NotFoundException('LISTING_DOCUMENT_NOT_FOUND');
   }
 
-  async readPublishedDocument(documentId: string) {
+  /**
+   * Any signed-in user can read reports of a published listing; once the
+   * listing is under negotiation only companies with an accepted proposal keep
+   * access, so the counterparty can still check the material.
+   */
+  async readPublishedDocument(userId: string, documentId: string) {
     return this.readDocument({
       id: documentId,
-      listing: { status: 'PUBLISHED', deletedAt: null },
+      listing: {
+        deletedAt: null,
+        OR: [
+          { status: 'PUBLISHED' },
+          {
+            status: 'NEGOTIATING',
+            proposals: {
+              some: {
+                status: 'ACCEPTED',
+                proposerCompany: { members: { some: { userId } } },
+              },
+            },
+          },
+        ],
+      },
     });
   }
 
@@ -492,6 +531,9 @@ export class ListingsService {
     const document = await this.prisma.listingDocument.findFirst({
       where: { id: documentId, ...activeDocumentsWhere },
       select: {
+        storageKey: true,
+        mimeType: true,
+        fileName: true,
         listing: { select: { companyId: true, createdByUserId: true } },
       },
     });
@@ -501,7 +543,7 @@ export class ListingsService {
       document.listing.companyId,
       document.listing.createdByUserId,
     );
-    return this.readDocument({ id: documentId });
+    return this.loadDocument(document);
   }
 
   async readModerationDocument(documentId: string) {
@@ -519,6 +561,14 @@ export class ListingsService {
       select: { storageKey: true, mimeType: true, fileName: true },
     });
     if (!document) throw new NotFoundException('LISTING_DOCUMENT_NOT_FOUND');
+    return this.loadDocument(document);
+  }
+
+  private async loadDocument(document: {
+    storageKey: string;
+    mimeType: string;
+    fileName: string;
+  }) {
     return {
       buffer: await this.mediaStorage.read(document.storageKey),
       mimeType: document.mimeType,

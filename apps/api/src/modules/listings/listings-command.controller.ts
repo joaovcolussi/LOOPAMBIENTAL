@@ -91,6 +91,8 @@ export class ListingsCommandController {
   @UseInterceptors(
     FileInterceptor('document', {
       limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+      // Browsers send UTF-8 file names; busboy defaults to latin1.
+      defParamCharset: 'utf8',
     }),
   )
   async addDocument(
@@ -99,20 +101,22 @@ export class ListingsCommandController {
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body() body: { type?: unknown; validUntil?: unknown },
   ): Promise<unknown> {
+    const type =
+      body.type === undefined || body.type === ''
+        ? 'TECHNICAL_REPORT'
+        : this.enumValue(body.type, LISTING_DOCUMENT_TYPES);
+    if (!type) throw new BadRequestException('INVALID_DOCUMENT_TYPE_VALUE');
+    if (
+      body.validUntil !== undefined &&
+      (typeof body.validUntil !== 'string' || body.validUntil.length > 10)
+    )
+      throw new BadRequestException('INVALID_DOCUMENT_VALIDITY');
     return {
       document: await this.listingsService.addDocument(
         request.user.id,
         id,
         file,
-        {
-          type:
-            this.enumValue(body.type, LISTING_DOCUMENT_TYPES) ??
-            'TECHNICAL_REPORT',
-          validUntil:
-            typeof body.validUntil === 'string' && body.validUntil.trim()
-              ? body.validUntil.trim().slice(0, 10)
-              : undefined,
-        },
+        { type, validUntil: body.validUntil || undefined },
       ),
     };
   }

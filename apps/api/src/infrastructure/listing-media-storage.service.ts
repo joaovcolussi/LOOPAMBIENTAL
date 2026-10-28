@@ -138,7 +138,12 @@ export class ListingMediaStorageService {
 
   private sanitizeFileName(value: string) {
     const base = value.split(/[\\/]/).pop() ?? 'documento';
-    const clean = base.replace(/[^\w.\- ]+/g, '_').trim();
+    // Keep accented letters (e.g. "Laudo técnico.pdf"); drop control and
+    // path characters. Content-Disposition encodes the name safely.
+    const clean = base
+      .normalize('NFC')
+      .replace(/[^\p{L}\p{N}._\- ()]+/gu, '_')
+      .trim();
     return (clean || 'documento').slice(0, 255);
   }
 

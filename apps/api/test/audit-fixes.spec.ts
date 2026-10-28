@@ -1,5 +1,5 @@
 import { AuthService } from '../src/modules/auth/auth.service';
-import { CompanyMembersService } from '../src/modules/company-members/company-members.service';
+import { ConversationsService } from '../src/modules/conversations/conversations.service';
 import { PaymentsService } from '../src/modules/payments/payments.service';
 
 describe('AuthService one-time tokens', () => {
@@ -48,51 +48,51 @@ describe('AuthService one-time tokens', () => {
   });
 });
 
-describe('CompanyMembersService.removeMember', () => {
-  it('also removes the member from the company conversations', async () => {
+describe('ConversationsService access', () => {
+  it('requires current membership in either company of the thread', async () => {
     const prisma = {
-      companyMember: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValueOnce({ role: 'OWNER' })
-          .mockResolvedValueOnce({ role: 'MEMBER' }),
-        delete: jest.fn().mockReturnValue('delete-member'),
-      },
-      conversationParticipant: {
-        deleteMany: jest.fn().mockReturnValue('delete-participants'),
-      },
-      $transaction: jest.fn().mockResolvedValue([]),
+      conversation: { findFirst: jest.fn().mockResolvedValue(null) },
+      message: { findMany: jest.fn() },
     };
-    const service = new CompanyMembersService(prisma as never, {} as never);
+    const service = new ConversationsService(prisma as never, {} as never);
 
-    await service.removeMember('owner-id', 'company-id', 'member-id');
-
-    expect(prisma.conversationParticipant.deleteMany).toHaveBeenCalledWith({
+    await expect(
+      service.messages('removed-member', 'conversation-id'),
+    ).rejects.toThrow('CONVERSATION_ACCESS_DENIED');
+    expect(prisma.conversation.findFirst).toHaveBeenCalledWith({
       where: {
-        userId: 'member-id',
-        conversation: {
-          OR: [
-            { listing: { companyId: 'company-id' } },
-            { proposal: { proposerCompanyId: 'company-id' } },
-          ],
-        },
+        id: 'conversation-id',
+        participants: { some: { userId: 'removed-member' } },
+        OR: [
+          {
+            listing: {
+              company: { members: { some: { userId: 'removed-member' } } },
+            },
+          },
+          {
+            proposal: {
+              proposerCompany: {
+                members: { some: { userId: 'removed-member' } },
+              },
+            },
+          },
+        ],
       },
+      select: { id: true },
     });
-    expect(prisma.$transaction).toHaveBeenCalledWith([
-      'delete-member',
-      'delete-participants',
-    ]);
+    expect(prisma.message.findMany).not.toHaveBeenCalled();
   });
 });
 
 describe('PaymentsService.createCheckout', () => {
-  function setup(status: string, paid: boolean) {
+  function setup(status: string, paid: boolean, pending: unknown = null) {
     const prisma = {
       paymentTransaction: {
         findFirst: jest
           .fn()
           .mockResolvedValueOnce(null)
-          .mockResolvedValueOnce(paid ? { id: 'paid-id' } : null),
+          .mockResolvedValueOnce(paid ? { id: 'paid-id' } : null)
+          .mockResolvedValueOnce(pending),
         create: jest.fn(),
       },
       deal: {
@@ -138,5 +138,66 @@ describe('PaymentsService.createCheckout', () => {
       service.createCheckout('user-id', 'deal-id', 'key-2'),
     ).rejects.toThrow('DEAL_ALREADY_PAID');
     expect(prisma.paymentTransaction.create).not.toHaveBeenCalled();
+  });
+
+  it('reuses the live checkout instead of opening a second one', async () => {
+    const pending = { id: 'pending-id', checkoutUrl: 'https://mp/checkout' };
+    const { service, prisma } = setup('AWAITING_PAYMENT', false, pending);
+
+    await expect(
+      service.createCheckout('user-id', 'deal-id', 'key-3'),
+    ).resolves.toBe(pending);
+    expect(prisma.paymentTransaction.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('PaymentsService.handleWebhook', () => {
+  it('never moves a deal that already advanced back to pickup', async () => {
+    const tx = {
+      paymentTransaction: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      deal: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      dealStatusHistory: { create: jest.fn() },
+    };
+    const prisma = {
+      paymentTransaction: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'tx-id',
+          dealId: 'deal-id',
+          companyId: 'buyer-id',
+          deal: { status: 'COMPLETED' },
+        }),
+      },
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const outbox = { enqueueWithin: jest.fn() };
+    const service = new PaymentsService(prisma as never, outbox as never);
+    const internals = service as unknown as {
+      mercadoPago: {
+        verifyWebhookSignature: () => boolean;
+        getPayment: () => Promise<object>;
+      };
+    };
+    internals.mercadoPago = {
+      verifyWebhookSignature: () => true,
+      getPayment: async () => ({
+        id: 'mp-1',
+        status: 'approved',
+        external_reference: 'tx-id',
+      }),
+    };
+
+    await service.handleWebhook('sig', 'req', 'mp-1', 'payment');
+
+    expect(tx.deal.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'deal-id',
+        status: { in: ['OPEN', 'AWAITING_DOCUMENTS', 'AWAITING_PAYMENT'] },
+      },
+      data: { status: 'AWAITING_PICKUP' },
+    });
+    expect(tx.dealStatusHistory.create).not.toHaveBeenCalled();
+    expect(outbox.enqueueWithin).toHaveBeenCalled();
   });
 });

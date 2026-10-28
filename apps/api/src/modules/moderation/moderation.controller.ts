@@ -16,7 +16,7 @@ import { ModerationService } from './moderation.service';
 import { ListingsService } from '../listings/listings.service';
 import { AdminMutationGuard } from '../auth/admin-mutation.guard';
 import type { Response } from 'express';
-import { attachmentDisposition } from '../../common/content-disposition';
+import { privateDownload } from '../../common/content-disposition';
 
 @Controller('admin/moderation/cases')
 @UseGuards(AuthGuard, ModerationGuard)
@@ -37,19 +37,14 @@ export class ModerationController {
     return new StreamableFile(media.buffer, { type: media.mimeType });
   }
   @Get('documents/:id')
-  @Header('Cache-Control', 'private, no-store')
-  @Header('X-Content-Type-Options', 'nosniff')
-  @Header('Content-Security-Policy', "sandbox; default-src 'none'")
   async document(
     @Param('id') id: string,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const document = await this.listingsService.readModerationDocument(id);
-    response.setHeader(
-      'Content-Disposition',
-      attachmentDisposition(document.fileName),
+    return privateDownload(
+      response,
+      await this.listingsService.readModerationDocument(id),
     );
-    return new StreamableFile(document.buffer, { type: document.mimeType });
   }
   @Post(':id/approve')
   @UseGuards(AdminMutationGuard)

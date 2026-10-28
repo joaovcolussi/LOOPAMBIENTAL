@@ -170,24 +170,11 @@ export class CompanyMembersService {
       throw new ForbiddenException('OWNER_CANNOT_BE_REMOVED');
     if (actorRole === 'ADMIN' && target.role === 'ADMIN')
       throw new ForbiddenException('ADMIN_CANNOT_REMOVE_ADMIN');
-    // Conversation access is granted per participant row, so a removed member
-    // must also leave the company's negotiation threads.
-    await this.prisma.$transaction([
-      this.prisma.companyMember.delete({
-        where: { companyId_userId: { companyId, userId: targetUserId } },
-      }),
-      this.prisma.conversationParticipant.deleteMany({
-        where: {
-          userId: targetUserId,
-          conversation: {
-            OR: [
-              { listing: { companyId } },
-              { proposal: { proposerCompanyId: companyId } },
-            ],
-          },
-        },
-      }),
-    ]);
+    // Conversation access is re-checked against current membership, so the
+    // participant rows can stay for history without granting access.
+    await this.prisma.companyMember.delete({
+      where: { companyId_userId: { companyId, userId: targetUserId } },
+    });
     return { userId: targetUserId, removed: true };
   }
 

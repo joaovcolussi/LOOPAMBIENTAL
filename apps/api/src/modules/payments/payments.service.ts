@@ -66,6 +66,13 @@ export class PaymentsService {
       select: { id: true },
     });
     if (alreadyPaid) throw new BadRequestException('DEAL_ALREADY_PAID');
+    // One live checkout per deal: reusing the pending preference prevents the
+    // buyer from paying two Mercado Pago links for the same deal.
+    const pending = await this.prisma.paymentTransaction.findFirst({
+      where: { dealId, status: 'PENDING', checkoutUrl: { not: null } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (pending) return pending;
     const amount = new Prisma.Decimal(deal.proposal.quantity)
       .mul(new Prisma.Decimal(deal.proposal.unitPrice))
       .toFixed(2);
@@ -211,19 +218,25 @@ export class PaymentsService {
       });
       if (claimed.count === 0) return;
       if (status !== 'PAID') return;
-      await tx.deal.update({
-        where: { id: transaction.dealId },
+      // Only a deal still waiting for payment advances; a late or duplicate
+      // payment must never move a shipped or completed deal backwards.
+      const advanced = await tx.deal.updateMany({
+        where: {
+          id: transaction.dealId,
+          status: { in: ['OPEN', 'AWAITING_DOCUMENTS', 'AWAITING_PAYMENT'] },
+        },
         data: { status: 'AWAITING_PICKUP' },
       });
-      await tx.dealStatusHistory.create({
-        data: {
-          dealId: transaction.dealId,
-          fromStatus: transaction.deal.status,
-          toStatus: 'AWAITING_PICKUP',
-          actorUserId: null,
-          note: 'PAYMENT_CONFIRMED',
-        },
-      });
+      if (advanced.count === 1)
+        await tx.dealStatusHistory.create({
+          data: {
+            dealId: transaction.dealId,
+            fromStatus: transaction.deal.status,
+            toStatus: 'AWAITING_PICKUP',
+            actorUserId: null,
+            note: 'PAYMENT_CONFIRMED',
+          },
+        });
       await this.outbox.enqueueWithin(tx, {
         type: 'payment.confirmed',
         aggregateType: 'PAYMENT_TRANSACTION',

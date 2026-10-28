@@ -24,6 +24,9 @@ describe('CompaniesService', () => {
       },
       company: { update: jest.fn().mockResolvedValue(updated) },
     };
+    Object.assign(prisma, {
+      $transaction: jest.fn((callback) => callback(prisma)),
+    });
     const service = new CompaniesService(prisma as never);
 
     await expect(
@@ -31,7 +34,7 @@ describe('CompaniesService', () => {
     ).resolves.toEqual({ ...updated, taxIdMasked: null });
   });
 
-  it('drops the verified badge when the CNPJ of a verified company changes', async () => {
+  it('drops the badge and voids pending requests when the CNPJ changes', async () => {
     const prisma = {
       companyMember: {
         findUnique: jest.fn().mockResolvedValue({ role: 'OWNER' }),
@@ -44,7 +47,10 @@ describe('CompaniesService', () => {
         }),
         update: jest.fn().mockResolvedValue({ id: 'company-id' }),
       },
+      companyVerification: { updateMany: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn(),
     };
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
     const service = new CompaniesService(prisma as never);
 
     await service.update('user-id', 'company-id', {
@@ -56,6 +62,10 @@ describe('CompaniesService', () => {
         data: expect.objectContaining({ verification: 'UNVERIFIED' }),
       }),
     );
+    expect(prisma.companyVerification.updateMany).toHaveBeenCalledWith({
+      where: { companyId: 'company-id', status: 'PENDING' },
+      data: { status: 'CANCELLED' },
+    });
   });
 
   it('keeps the badge when the legal identity is unchanged', async () => {
@@ -71,7 +81,10 @@ describe('CompaniesService', () => {
         }),
         update: jest.fn().mockResolvedValue({ id: 'company-id' }),
       },
+      companyVerification: { updateMany: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn(),
     };
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
     const service = new CompaniesService(prisma as never);
 
     await service.update('user-id', 'company-id', {
@@ -81,5 +94,6 @@ describe('CompaniesService', () => {
     expect(prisma.company.update.mock.calls[0][0].data).not.toHaveProperty(
       'verification',
     );
+    expect(prisma.companyVerification.updateMany).not.toHaveBeenCalled();
   });
 });

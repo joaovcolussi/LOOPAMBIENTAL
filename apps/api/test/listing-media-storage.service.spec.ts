@@ -49,7 +49,7 @@ describe('ListingMediaStorageService', () => {
     ).resolves.toEqual(expect.objectContaining({ mimeType: 'image/webp' }));
   });
 
-  it('stores listing reports under their own prefix keeping PDF names', async () => {
+  it('stores listing reports under their own prefix keeping accented names', async () => {
     const service = new ListingMediaStorageService();
     const internals = service as unknown as {
       ensureBucket: () => Promise<void>;
@@ -70,7 +70,7 @@ describe('ListingMediaStorageService', () => {
 
     expect(result.storageKey).toMatch(/^listing-documents\/[0-9a-f-]+\.pdf$/);
     expect(result.mimeType).toBe('application/pdf');
-    expect(result.fileName).toBe('Laudo t_cnico.pdf');
+    expect(result.fileName).toBe('Laudo técnico.pdf');
   });
 
   it('renames image reports to the converted WebP extension', async () => {

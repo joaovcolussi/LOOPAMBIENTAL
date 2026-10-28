@@ -11,6 +11,7 @@ import {
   randomBytes,
   randomUUID,
 } from 'node:crypto';
+import type { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { publicListingCardSelect } from '../listings/public-listing-select';
 
@@ -135,81 +136,91 @@ export class CompaniesService {
     await this.assertCanManage(userId, id);
     const taxId =
       input.taxId !== undefined ? this.normalizeTaxId(input.taxId) : undefined;
-    const identityChanged = await this.verifiedIdentityChanged(id, {
+    const identityChanged = await this.legalIdentityChanged(id, {
       legalName: input.legalName,
       taxId,
     });
-    const company = await this.prisma.company.update({
-      where: { id },
-      data: {
-        // A verified badge attests a specific legal entity; changing its legal
-        // name or CNPJ requires a new verification.
-        ...(identityChanged ? { verification: 'UNVERIFIED' as const } : {}),
-        ...(input.legalName !== undefined
-          ? { legalName: input.legalName }
-          : {}),
-        ...(input.tradeName !== undefined
-          ? { tradeName: input.tradeName }
-          : {}),
-        ...(input.description !== undefined
-          ? { description: input.description }
-          : {}),
-        ...(input.city !== undefined ? { city: input.city } : {}),
-        ...(input.state !== undefined
-          ? { state: input.state.toUpperCase() }
-          : {}),
-        ...(taxId !== undefined
-          ? taxId
-            ? {
-                taxIdHash: this.hashTaxId(taxId),
-                taxIdEncrypted: this.encrypt(taxId),
-              }
-            : { taxIdHash: null, taxIdEncrypted: null }
-          : {}),
-        ...(input.contactName !== undefined
-          ? { contactName: input.contactName }
-          : {}),
-        ...(input.contactEmail !== undefined
-          ? { contactEmail: input.contactEmail }
-          : {}),
-        ...(input.contactWhatsapp !== undefined
-          ? { contactWhatsapp: input.contactWhatsapp }
-          : {}),
-        ...(input.addressLine !== undefined
-          ? { addressLine: input.addressLine }
-          : {}),
-        ...(input.addressNumber !== undefined
-          ? { addressNumber: input.addressNumber }
-          : {}),
-        ...(input.addressDistrict !== undefined
-          ? { addressDistrict: input.addressDistrict }
-          : {}),
-        ...(input.addressPostalCode !== undefined
-          ? { addressPostalCode: input.addressPostalCode }
-          : {}),
-        ...(input.contactVisibility
-          ? { contactVisibility: input.contactVisibility }
-          : {}),
-        ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
-        ...(input.longitude !== undefined
-          ? { longitude: input.longitude }
-          : {}),
-      },
-      select: this.companySelect,
+    const updateCompany = (transaction: Prisma.TransactionClient) =>
+      transaction.company.update({
+        where: { id },
+        data: {
+          // Verification attests a specific legal entity: changing the legal
+          // name or CNPJ drops the badge and voids requests still under review.
+          ...(identityChanged ? { verification: 'UNVERIFIED' as const } : {}),
+          ...(input.legalName !== undefined
+            ? { legalName: input.legalName }
+            : {}),
+          ...(input.tradeName !== undefined
+            ? { tradeName: input.tradeName }
+            : {}),
+          ...(input.description !== undefined
+            ? { description: input.description }
+            : {}),
+          ...(input.city !== undefined ? { city: input.city } : {}),
+          ...(input.state !== undefined
+            ? { state: input.state.toUpperCase() }
+            : {}),
+          ...(taxId !== undefined
+            ? taxId
+              ? {
+                  taxIdHash: this.hashTaxId(taxId),
+                  taxIdEncrypted: this.encrypt(taxId),
+                }
+              : { taxIdHash: null, taxIdEncrypted: null }
+            : {}),
+          ...(input.contactName !== undefined
+            ? { contactName: input.contactName }
+            : {}),
+          ...(input.contactEmail !== undefined
+            ? { contactEmail: input.contactEmail }
+            : {}),
+          ...(input.contactWhatsapp !== undefined
+            ? { contactWhatsapp: input.contactWhatsapp }
+            : {}),
+          ...(input.addressLine !== undefined
+            ? { addressLine: input.addressLine }
+            : {}),
+          ...(input.addressNumber !== undefined
+            ? { addressNumber: input.addressNumber }
+            : {}),
+          ...(input.addressDistrict !== undefined
+            ? { addressDistrict: input.addressDistrict }
+            : {}),
+          ...(input.addressPostalCode !== undefined
+            ? { addressPostalCode: input.addressPostalCode }
+            : {}),
+          ...(input.contactVisibility
+            ? { contactVisibility: input.contactVisibility }
+            : {}),
+          ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
+          ...(input.longitude !== undefined
+            ? { longitude: input.longitude }
+            : {}),
+        },
+        select: this.companySelect,
+      });
+    const company = await this.prisma.$transaction(async (transaction) => {
+      // Cancelling first makes a concurrent approval fail to claim the request.
+      if (identityChanged)
+        await transaction.companyVerification.updateMany({
+          where: { companyId: id, status: 'PENDING' },
+          data: { status: 'CANCELLED' },
+        });
+      return updateCompany(transaction);
     });
     return this.withMaskedTaxId(company, taxId);
   }
 
-  private async verifiedIdentityChanged(
+  private async legalIdentityChanged(
     companyId: string,
     next: { legalName?: string; taxId?: string },
   ) {
     if (next.legalName === undefined && next.taxId === undefined) return false;
     const current = await this.prisma.company.findUnique({
       where: { id: companyId },
-      select: { verification: true, legalName: true, taxIdHash: true },
+      select: { legalName: true, taxIdHash: true },
     });
-    if (!current || current.verification !== 'VERIFIED') return false;
+    if (!current) return false;
     const legalNameChanged =
       next.legalName !== undefined && next.legalName !== current.legalName;
     const taxIdChanged =

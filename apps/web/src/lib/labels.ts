@@ -51,6 +51,7 @@ export const listingReasonLabels: Record<string, string> = {
   LISTING_EDITED: 'Editado — voltou para análise',
   LISTING_MEDIA_ADDED: 'Fotos alteradas — voltou para análise',
   LISTING_DOCUMENT_ADDED: 'Laudo adicionado — voltou para análise',
+  LISTING_DOCUMENT_REMOVED: 'Laudo removido — voltou para análise',
   MODERATION_APPROVED: 'Aprovado pela moderação',
   MODERATION_REJECTED: 'Rejeitado pela moderação',
   LISTING_PAUSED: 'Anúncio pausado',

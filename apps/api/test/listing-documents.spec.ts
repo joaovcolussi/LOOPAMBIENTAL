@@ -9,8 +9,11 @@ const pdf = {
 
 function setup(status = 'DRAFT', role = 'OWNER', existingDocuments = 0) {
   const transaction = {
+    $queryRaw: jest.fn().mockResolvedValue([]),
     listingDocument: {
       create: jest.fn().mockResolvedValue({ id: 'document-id' }),
+      count: jest.fn().mockResolvedValue(existingDocuments),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     listing: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     moderationCase: { create: jest.fn().mockResolvedValue({}) },
@@ -158,29 +161,71 @@ describe('ListingsService documents (laudos)', () => {
   });
 
   it('soft deletes a report and scopes it to the listing', async () => {
-    const { service, prisma } = setup();
+    const { service, transaction } = setup();
 
     await service.removeDocument('creator-id', 'listing-id', 'document-id');
 
-    expect(prisma.listingDocument.updateMany).toHaveBeenCalledWith({
+    expect(transaction.moderationCase.create).not.toHaveBeenCalled();
+    expect(transaction.listingDocument.updateMany).toHaveBeenCalledWith({
       where: { id: 'document-id', listingId: 'listing-id', deletedAt: null },
       data: { deletedAt: expect.any(Date) },
     });
   });
 
-  it('only serves reports of published listings to other companies', async () => {
+  it('returns a published listing to review when a report is removed', async () => {
+    const { service, transaction } = setup('PUBLISHED');
+
+    await service.removeDocument('creator-id', 'listing-id', 'document-id');
+
+    expect(transaction.moderationCase.create).toHaveBeenCalled();
+    expect(transaction.listingStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ reason: 'LISTING_DOCUMENT_REMOVED' }),
+    });
+  });
+
+  it('re-checks the limit under the listing lock (concurrent uploads)', async () => {
+    const { service, storage, transaction } = setup('DRAFT', 'OWNER', 4);
+    transaction.listingDocument.count.mockResolvedValue(5);
+
+    await expect(
+      service.addDocument('creator-id', 'listing-id', pdf, {
+        type: 'TECHNICAL_REPORT',
+      }),
+    ).rejects.toThrow('DOCUMENT_LIMIT_EXCEEDED');
+    expect(transaction.$queryRaw).toHaveBeenCalled();
+    expect(transaction.listingDocument.create).not.toHaveBeenCalled();
+    expect(storage.remove).toHaveBeenCalledWith('listing-documents/key.pdf');
+  });
+
+  it('serves reports of published listings or to the accepted counterparty', async () => {
     const { service, prisma } = setup();
     prisma.listingDocument.findFirst.mockResolvedValue(null);
 
-    await expect(service.readPublishedDocument('document-id')).rejects.toThrow(
-      'LISTING_DOCUMENT_NOT_FOUND',
-    );
+    await expect(
+      service.readPublishedDocument('buyer-id', 'document-id'),
+    ).rejects.toThrow('LISTING_DOCUMENT_NOT_FOUND');
     expect(prisma.listingDocument.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          listing: { status: 'PUBLISHED', deletedAt: null },
           status: 'READY',
           deletedAt: null,
+          listing: {
+            deletedAt: null,
+            OR: [
+              { status: 'PUBLISHED' },
+              {
+                status: 'NEGOTIATING',
+                proposals: {
+                  some: {
+                    status: 'ACCEPTED',
+                    proposerCompany: {
+                      members: { some: { userId: 'buyer-id' } },
+                    },
+                  },
+                },
+              },
+            ],
+          },
         }),
       }),
     );
