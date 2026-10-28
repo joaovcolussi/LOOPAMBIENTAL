@@ -10,6 +10,12 @@ import { PrismaService } from '../../infrastructure/prisma.service';
 import { OutboxService } from '../../infrastructure/outbox.service';
 import { MercadoPagoAdapter } from './mercado-pago.adapter';
 
+const PAYABLE_DEAL_STATUSES: readonly string[] = [
+  'OPEN',
+  'AWAITING_DOCUMENTS',
+  'AWAITING_PAYMENT',
+];
+
 @Injectable()
 export class PaymentsService {
   private readonly mercadoPago = new MercadoPagoAdapter();
@@ -50,8 +56,16 @@ export class PaymentsService {
       where: { companyId_userId: { companyId: deal.buyerCompanyId, userId } },
     });
     if (!membership) throw new ForbiddenException('DEAL_ACCESS_DENIED');
-    if (deal.status === 'CANCELLED')
+    // Only deals that have not been paid yet can open a checkout. A paid,
+    // shipped, completed or cancelled deal must never be charged again nor
+    // moved back to AWAITING_PAYMENT.
+    if (!PAYABLE_DEAL_STATUSES.includes(deal.status))
       throw new BadRequestException('DEAL_NOT_PAYABLE');
+    const alreadyPaid = await this.prisma.paymentTransaction.findFirst({
+      where: { dealId, status: 'PAID' },
+      select: { id: true },
+    });
+    if (alreadyPaid) throw new BadRequestException('DEAL_ALREADY_PAID');
     const amount = new Prisma.Decimal(deal.proposal.quantity)
       .mul(new Prisma.Decimal(deal.proposal.unitPrice))
       .toFixed(2);
@@ -96,19 +110,23 @@ export class PaymentsService {
           status: 'PENDING',
         },
       });
-      await this.prisma.deal.update({
-        where: { id: dealId },
-        data: { status: 'AWAITING_PAYMENT' },
-      });
-      await this.prisma.dealStatusHistory.create({
-        data: {
-          dealId,
-          fromStatus: deal.status,
-          toStatus: 'AWAITING_PAYMENT',
-          actorUserId: userId,
-          note: 'CHECKOUT_CREATED',
-        },
-      });
+      if (deal.status !== 'AWAITING_PAYMENT')
+        await this.prisma.$transaction(async (tx) => {
+          const changed = await tx.deal.updateMany({
+            where: { id: dealId, status: deal.status },
+            data: { status: 'AWAITING_PAYMENT' },
+          });
+          if (changed.count !== 1) return;
+          await tx.dealStatusHistory.create({
+            data: {
+              dealId,
+              fromStatus: deal.status,
+              toStatus: 'AWAITING_PAYMENT',
+              actorUserId: userId,
+              note: 'CHECKOUT_CREATED',
+            },
+          });
+        });
       return payment;
     } catch (error) {
       try {

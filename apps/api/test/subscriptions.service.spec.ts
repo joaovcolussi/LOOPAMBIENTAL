@@ -28,13 +28,11 @@ describe('SubscriptionsService', () => {
         findMany: jest.fn().mockResolvedValue([{ userId: 'owner-1' }]),
       },
       plan: {
-        findFirst: jest
-          .fn()
-          .mockResolvedValue({
-            id: 'plan-id',
-            code: 'ESSENCIAL',
-            name: 'Essencial',
-          }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'plan-id',
+          code: 'ESSENCIAL',
+          name: 'Essencial',
+        }),
       },
       $transaction: jest.fn((callback) => callback(transaction)),
     };

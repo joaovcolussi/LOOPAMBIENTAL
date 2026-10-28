@@ -12,6 +12,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { promisify } from 'node:util';
+import type { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { EmailService } from './email.service';
 
@@ -93,16 +94,17 @@ export class AuthService {
       authToken.expiresAt <= new Date()
     )
       throw new UnauthorizedException('INVALID_VERIFICATION_TOKEN');
-    await this.prisma.$transaction([
-      this.prisma.authToken.update({
-        where: { id: authToken.id },
-        data: { usedAt: new Date() },
-      }),
-      this.prisma.user.update({
+    await this.prisma.$transaction(async (transaction) => {
+      await this.consumeAuthToken(
+        transaction,
+        authToken.id,
+        'INVALID_VERIFICATION_TOKEN',
+      );
+      await transaction.user.update({
         where: { id: authToken.userId },
         data: { emailVerifiedAt: new Date() },
-      }),
-    ]);
+      });
+    });
     return { verified: true };
   }
 
@@ -135,18 +137,35 @@ export class AuthService {
     )
       throw new UnauthorizedException('INVALID_RESET_TOKEN');
     const passwordHash = await this.hashPassword(password);
-    await this.prisma.$transaction([
-      this.prisma.authToken.update({
-        where: { id: authToken.id },
-        data: { usedAt: new Date() },
-      }),
-      this.prisma.user.update({
+    await this.prisma.$transaction(async (transaction) => {
+      await this.consumeAuthToken(
+        transaction,
+        authToken.id,
+        'INVALID_RESET_TOKEN',
+      );
+      await transaction.user.update({
         where: { id: authToken.userId },
         data: { passwordHash },
-      }),
-      this.prisma.session.deleteMany({ where: { userId: authToken.userId } }),
-    ]);
+      });
+      await transaction.session.deleteMany({
+        where: { userId: authToken.userId },
+      });
+    });
     return { reset: true };
+  }
+
+  // Marks a one-time token as used only if no concurrent request consumed it
+  // first, so a verification or reset link cannot be redeemed twice.
+  private async consumeAuthToken(
+    transaction: Prisma.TransactionClient,
+    id: string,
+    errorCode: string,
+  ) {
+    const consumed = await transaction.authToken.updateMany({
+      where: { id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    if (consumed.count !== 1) throw new UnauthorizedException(errorCode);
   }
 
   async login(email: string, password: string, context: SessionContext) {

@@ -40,7 +40,8 @@ export class MercadoPagoAdapter {
         ],
         external_reference: input.transactionId,
         payer: input.payerEmail ? { email: input.payerEmail } : undefined,
-        notification_url: `${process.env.WEB_PUBLIC_URL ?? 'http://localhost:3000'}/api/v1/payments/webhook/mercadopago`,
+        // The webhook is served by the API, not by the Next.js frontend.
+        notification_url: `${process.env.API_PUBLIC_URL ?? 'http://localhost:3001'}/api/v1/payments/webhook/mercadopago`,
         back_urls: {
           success: `${process.env.WEB_PUBLIC_URL ?? 'http://localhost:3000'}/dashboard/pagamentos?status=success`,
           failure: `${process.env.WEB_PUBLIC_URL ?? 'http://localhost:3000'}/dashboard/pagamentos?status=failure`,

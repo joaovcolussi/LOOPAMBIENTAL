@@ -135,9 +135,16 @@ export class CompaniesService {
     await this.assertCanManage(userId, id);
     const taxId =
       input.taxId !== undefined ? this.normalizeTaxId(input.taxId) : undefined;
+    const identityChanged = await this.verifiedIdentityChanged(id, {
+      legalName: input.legalName,
+      taxId,
+    });
     const company = await this.prisma.company.update({
       where: { id },
       data: {
+        // A verified badge attests a specific legal entity; changing its legal
+        // name or CNPJ requires a new verification.
+        ...(identityChanged ? { verification: 'UNVERIFIED' as const } : {}),
         ...(input.legalName !== undefined
           ? { legalName: input.legalName }
           : {}),
@@ -191,6 +198,24 @@ export class CompaniesService {
       select: this.companySelect,
     });
     return this.withMaskedTaxId(company, taxId);
+  }
+
+  private async verifiedIdentityChanged(
+    companyId: string,
+    next: { legalName?: string; taxId?: string },
+  ) {
+    if (next.legalName === undefined && next.taxId === undefined) return false;
+    const current = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { verification: true, legalName: true, taxIdHash: true },
+    });
+    if (!current || current.verification !== 'VERIFIED') return false;
+    const legalNameChanged =
+      next.legalName !== undefined && next.legalName !== current.legalName;
+    const taxIdChanged =
+      next.taxId !== undefined &&
+      (next.taxId ? this.hashTaxId(next.taxId) : null) !== current.taxIdHash;
+    return legalNameChanged || taxIdChanged;
   }
 
   private async assertCanManage(userId: string, companyId: string) {
