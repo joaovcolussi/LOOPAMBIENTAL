@@ -2,16 +2,17 @@
 // Inicia a stack completa de desenvolvimento do LOOP AMBIENTAL.
 //
 // Uso:
-//   pnpm start           # infraestrutura + migrações + API/Web/Worker (hot reload)
-//   pnpm start infra     # apenas MySQL, Redis, MinIO e Mailpit
-//   pnpm start db        # apenas migrações do banco
-//   pnpm start stop      # para os containers (mantém volumes)
-//   pnpm start down      # remove os containers (mantém volumes)
+//   corepack pnpm start        # infraestrutura + migrações + API/Web/Worker
+//   corepack pnpm start infra  # apenas MySQL, Redis, MinIO e Mailpit
+//   corepack pnpm start db     # apenas migrações do banco
+//   corepack pnpm start stop   # para os containers (mantém volumes)
+//   corepack pnpm start down   # remove os containers (mantém volumes)
 //
 // Funciona com Docker Compose ou Podman Compose, em Windows, Linux e macOS.
 
 import { spawnSync, spawn } from 'node:child_process';
-import { copyFileSync, existsSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -81,7 +82,16 @@ function resolveCompose() {
 function ensureEnvFiles() {
   if (!existsSync(join(rootDir, '.env'))) {
     log('Criando .env a partir de .env.example');
-    copyFileSync(join(rootDir, '.env.example'), join(rootDir, '.env'));
+    // Cada instalação recebe sua própria chave de criptografia de campos
+    // (CNPJ), em vez do valor público do arquivo de exemplo.
+    const example = readFileSync(join(rootDir, '.env.example'), 'utf8');
+    writeFileSync(
+      join(rootDir, '.env'),
+      example.replace(
+        /^FIELD_ENCRYPTION_KEY=.*$/m,
+        `FIELD_ENCRYPTION_KEY="${randomBytes(32).toString('base64url')}"`,
+      ),
+    );
   }
   if (!existsSync(join(rootDir, 'apps', 'web', '.env.local'))) {
     log('Criando apps/web/.env.local a partir do exemplo');
@@ -105,18 +115,36 @@ function ensureDependencies() {
   }
 }
 
+// `compose ps --format {{.Health}}` não existe em todos os providers
+// (ex.: podman-compose); nesse caso consulta o container diretamente.
+function mysqlHealth(compose) {
+  const [exe, ...prefix] = compose;
+  const fromPs = capture(exe, [
+    ...prefix,
+    'ps',
+    '--format',
+    '{{.Health}}',
+    'mysql',
+  ]).stdout.trim();
+  if (fromPs === 'healthy') return fromPs;
+  const containerId = capture(exe, [...prefix, 'ps', '-q', 'mysql'])
+    .stdout.trim()
+    .split(/\r?\n/)[0];
+  if (!containerId) return fromPs;
+  const engine =
+    exe === 'podman' || exe === 'podman-compose' ? 'podman' : 'docker';
+  return capture(engine, [
+    'inspect',
+    '--format',
+    '{{.State.Health.Status}}',
+    containerId,
+  ]).stdout.trim();
+}
+
 async function waitForMysql(compose) {
   log('Aguardando o MySQL ficar saudável...');
-  const [exe, ...prefix] = compose;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const { stdout } = capture(exe, [
-      ...prefix,
-      'ps',
-      '--format',
-      '{{.Health}}',
-      'mysql',
-    ]);
-    if (stdout.trim() === 'healthy') {
+    if (mysqlHealth(compose) === 'healthy') {
       log('MySQL pronto.');
       return;
     }

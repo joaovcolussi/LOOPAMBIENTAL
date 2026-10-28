@@ -3,76 +3,151 @@
 Marketplace B2B para compra, venda e negociação de resíduos, recicláveis,
 sucatas e materiais reaproveitáveis.
 
+Funciona em **Windows**, **Linux** e **macOS**. Todos os comandos deste guia
+usam `corepack pnpm` e scripts Node.js, então são os mesmos no PowerShell, no
+Prompt de Comando e no Bash. Quando um passo muda entre sistemas, as duas
+versões aparecem lado a lado.
+
+## Sumário
+
+- [Início rápido](#início-rápido)
+- [O que está implementado](#o-que-está-implementado)
+- [Laudos nos anúncios](#laudos-nos-anúncios)
+- [Requisitos](#requisitos)
+- [Instalação](#instalação)
+- [Desenvolvimento com hot reload](#desenvolvimento-com-hot-reload)
+- [Executar tudo em containers](#executar-tudo-em-containers)
+- [Banco de dados e migrações](#banco-de-dados-e-migrações)
+- [Primeira conta e administração](#primeira-conta-e-administração)
+- [Variáveis de ambiente](#variáveis-de-ambiente)
+- [Testes e validação](#testes-e-validação)
+- [Diagnóstico](#diagnóstico)
+- [Estrutura](#estrutura)
+- [Pendências antes de produção](#pendências-antes-de-produção)
+
 ## Início rápido
 
-Depois de clonar e instalar as dependências, um único comando sobe a
-infraestrutura, aplica as migrações e inicia API, Web e Worker com hot reload:
-
 ```bash
+git clone https://github.com/joaovcolussi/LOOPAMBIENTAL.git
+cd LOOPAMBIENTAL
+corepack enable
+corepack pnpm install
 corepack pnpm start
 ```
 
-O script detecta Docker Compose ou Podman Compose automaticamente, cria os
-arquivos de ambiente que faltarem, aguarda o MySQL ficar saudável, gera o client
-do Prisma e aplica as migrações antes de iniciar os três processos. Pressione
-`Ctrl+C` para encerrar a aplicação; os containers de infraestrutura continuam em
-execução.
+`corepack pnpm start`:
 
-| Comando                             | O que faz                                         |
-| ----------------------------------- | ------------------------------------------------- |
-| `corepack pnpm start`               | Sobe tudo e inicia API, Web e Worker (hot reload) |
-| `corepack pnpm start:infra`         | Sobe apenas MySQL, Redis, MinIO e Mailpit         |
-| `corepack pnpm start:db`            | Aplica as migrações no banco em execução          |
-| `node infra/scripts/start.mjs stop` | Para os containers (mantém os volumes)            |
-| `node infra/scripts/start.mjs down` | Remove os containers (mantém os volumes)          |
+1. cria `.env` e `apps/web/.env.local` se ainda não existirem, gerando uma
+   chave `FIELD_ENCRYPTION_KEY` aleatória;
+2. detecta Docker Compose ou Podman Compose (inicia a máquina Podman no
+   Windows/macOS quando necessário);
+3. sobe MySQL, Redis, MinIO e Mailpit e espera o MySQL ficar saudável;
+4. gera o client do Prisma e aplica as migrações;
+5. inicia API, Web e Worker com hot reload.
 
-A aplicação fica em `http://localhost:3000`. Os passos manuais, as alternativas
-com Docker/Podman e o modo containerizado estão detalhados nas seções abaixo.
+Abra `http://localhost:3000`. Pressione `Ctrl+C` para encerrar; os containers
+de infraestrutura continuam rodando até você executar `corepack pnpm stop`.
+
+| Comando                     | O que faz                                      |
+| --------------------------- | ---------------------------------------------- |
+| `corepack pnpm start`       | Infraestrutura + migrações + API, Web e Worker |
+| `corepack pnpm start:infra` | Sobe apenas MySQL, Redis, MinIO e Mailpit      |
+| `corepack pnpm start:db`    | Aplica as migrações no banco em execução       |
+| `corepack pnpm stop`        | Para os containers (mantém os dados)           |
+| `corepack pnpm start down`  | Remove os containers (mantém os volumes)       |
+| `corepack pnpm dev`         | Só inicia API, Web e Worker (infra já rodando) |
+| `corepack pnpm db:migrate`  | Aplica migrações (`prisma migrate deploy`)     |
+| `corepack pnpm db:generate` | Regenera o client do Prisma                    |
+
+Para forçar um provedor de containers, defina `COMPOSE` antes do comando:
+
+```powershell
+# Windows PowerShell
+$env:COMPOSE = "podman compose"; corepack pnpm start
+```
+
+```bash
+# Linux/macOS
+COMPOSE="podman compose" corepack pnpm start
+```
 
 ## O que está implementado
 
-- Cadastro, login, recuperação e verificação de e-mail.
-- Empresas, membros e contatos com controle de visibilidade.
-- Categorias, materiais e anúncios de compra ou venda.
-- Busca com índice `FULLTEXT`, ranking por relevância, facetas, filtros,
-  favoritos e paginação por cursor.
+- Cadastro, login, recuperação de senha e verificação de e-mail.
+- Empresas, membros, convites e contatos com controle de visibilidade.
+- Verificação documental de empresas (cartão CNPJ, contrato social, licenças).
+- Categorias, materiais e anúncios de compra (`BUY`) ou venda (`SELL`).
+- **Laudos e documentos técnicos nos anúncios** de compra e venda (veja abaixo).
+- Busca com índice `FULLTEXT`, ranking por relevância, facetas, filtros por
+  raio/distância, favoritos, buscas salvas e paginação por cursor.
 - Propostas, contrapropostas, negociações e mensagens.
-- Notificações, moderação, pagamentos e solicitações logísticas.
-- Planos e assinaturas self-service (`/dashboard/assinatura`) com desbloqueio de
-  contato por benefício de plano ou avulso.
-- Avaliações e reputação após negociação concluída, com média pública por
-  empresa (`/dashboard/avaliacoes` e página pública da empresa).
-- Geolocalização: filtro por raio e ordenação por distância na busca de
-  anúncios, com coordenadas por empresa e anúncio.
-- Painel administrativo com indicadores, permissões, moderação, gestão do
-  carrossel, usuários, empresas, anúncios, assinaturas, pagamentos, auditoria e
-  configurações.
-- Fotos privadas de anúncios e imagens administrativas armazenadas em MinIO.
-- Worker com BullMQ + Redis e transactional outbox para tarefas assíncronas.
-- API NestJS, frontend Next.js, worker e banco MySQL com Prisma.
-- CI com lint, typecheck, testes, build e E2E (Playwright).
+- Notificações, moderação, denúncias, pagamentos e solicitações logísticas.
+- Planos e assinaturas (`/dashboard/assinatura`) com desbloqueio de contato.
+- Avaliações e reputação após negociação concluída.
+- Painel administrativo com indicadores, moderação, carrossel, usuários,
+  empresas, anúncios, assinaturas, pagamentos, auditoria e configurações.
+- Arquivos privados (fotos, laudos, documentos) no MinIO/S3.
+- Worker com BullMQ + Redis e transactional outbox.
+- CI com lint, typecheck, testes unitários, build e E2E (Playwright).
 
-Pagamentos Mercado Pago e envio de e-mail real dependem de credenciais externas.
-Em desenvolvimento, os e-mails são capturados pelo Mailpit.
+Pagamentos Mercado Pago e e-mail real dependem de credenciais externas. Em
+desenvolvimento, os e-mails ficam no Mailpit (`http://localhost:8025`).
+
+## Laudos nos anúncios
+
+Anúncios de **venda** e de **compra** aceitam laudos e documentos técnicos:
+
+| Tipo                          | Uso típico                                 |
+| ----------------------------- | ------------------------------------------ |
+| Laudo técnico                 | Caracterização do resíduo (ex.: NBR 10004) |
+| Laudo de análise laboratorial | Composição, umidade, contaminantes         |
+| FDS / FISPQ                   | Ficha de dados de segurança do material    |
+| Outro documento técnico       | Especificação de compra, certificados      |
+
+Como usar:
+
+- **Novo anúncio** (`/dashboard/anuncios/novo`): na seção "Laudos e documentos
+  técnicos", escolha o tipo, a validade (opcional) e o arquivo, clique em
+  "Adicionar laudo" e envie o anúncio. Os laudos sobem junto com as fotos.
+- **Anúncio existente** (`/dashboard/anuncios/[id]`): anexe ou remova laudos.
+  Anexar um laudo em anúncio publicado o devolve para a moderação.
+- **Página pública** (`/anuncios/[slug]`): lista os laudos com tipo, tamanho e
+  validade (vencidos ficam destacados). O download exige login.
+- **Moderação** (`/admin/moderacao`): moderadores baixam os laudos dos anúncios
+  em análise.
+
+Regras: até 5 laudos por anúncio, PDF, JPEG, PNG ou WebP com até 10 MB cada. O
+tipo é detectado pelo conteúdo (não pela extensão); imagens são decodificadas e
+convertidas para WebP. Os arquivos ficam em bucket privado, são servidos como
+download (`Content-Disposition: attachment`, `nosniff`, CSP `sandbox`) e a
+remoção é lógica (`deleted_at`) para preservar o histórico da negociação.
+
+API:
+
+```text
+POST   /api/v1/listings/:id/documents              multipart: document, type, validUntil (AAAA-MM-DD)
+DELETE /api/v1/listings/:id/documents/:documentId
+GET    /api/v1/listings/documents/:id              usuário autenticado, anúncio publicado
+GET    /api/v1/listings/documents/:id/owner        membros da empresa anunciante
+GET    /api/v1/admin/moderation/cases/documents/:id moderadores
+```
 
 ## Requisitos
 
-Escolha uma opção:
+| Sistema | Containers                         | Terminal          |
+| ------- | ---------------------------------- | ----------------- |
+| Windows | Docker Desktop ou Podman Desktop   | PowerShell ou CMD |
+| Linux   | Docker Engine ou Podman (rootless) | Bash, Zsh etc.    |
+| macOS   | Docker Desktop ou Podman Desktop   | Terminal          |
 
-| Ambiente | Containers                       | Terminal   |
-| -------- | -------------------------------- | ---------- |
-| Windows  | Docker Desktop ou Podman Machine | PowerShell |
-| Linux    | Docker Engine ou Podman rootless | Bash       |
-| macOS    | Docker Desktop ou Podman Machine | Terminal   |
+Também é necessário:
 
-Para desenvolvimento com hot reload, instale também:
+- Node.js 22 ou 24 LTS (inclui o Corepack);
+- pnpm `9.15.5` (instalado automaticamente pelo Corepack);
+- Git;
+- cerca de 8 GB de RAM livres.
 
-- Node.js 22 ou 24 LTS.
-- Corepack e pnpm `9.15.5`.
-- Git.
-- Aproximadamente 8 GB de RAM.
-
-Confirme as ferramentas:
+Confira as ferramentas:
 
 ```bash
 node --version
@@ -80,13 +155,16 @@ corepack pnpm --version
 docker compose version
 ```
 
-Com Podman, substitua `docker compose version` por `podman compose version`. As
-portas `3000`, `3001`, `3306`, `6379`, `9000`, `9001`, `1025` e `8025` precisam
-estar livres.
+Com Podman, use `podman compose version`. As portas `3000`, `3001`, `3306`,
+`6379`, `9000`, `9001`, `1025` e `8025` precisam estar livres.
+
+> **Windows:** o repositório tem `.gitattributes` que força finais de linha LF,
+> então não é preciso mudar o `core.autocrlf`. Se você clonou antes dessa
+> mudança e o `lint` acusa todos os arquivos, rode
+> `git rm --cached -r . ; git reset --hard` (descarta alterações locais não
+> commitadas) para renormalizar.
 
 ## Instalação
-
-Clone o projeto e instale as dependências:
 
 ```bash
 git clone https://github.com/joaovcolussi/LOOPAMBIENTAL.git
@@ -95,286 +173,223 @@ corepack enable
 corepack pnpm install
 ```
 
-Crie os arquivos de ambiente.
+O `install` também gera o client do Prisma automaticamente. No Windows, se
+`corepack enable` pedir permissão de administrador, abra o terminal como
+administrador uma vez ou use sempre o prefixo `corepack pnpm`.
 
-Windows PowerShell:
+Os arquivos de ambiente são criados pelo `corepack pnpm start`. Para criá-los
+manualmente:
 
 ```powershell
+# Windows PowerShell
 Copy-Item .env.example .env
 Copy-Item apps/web/.env.example apps/web/.env.local
 ```
 
-Linux/macOS:
-
 ```bash
+# Linux/macOS
 cp .env.example .env
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-Para desenvolvimento local, os valores padrão dos arquivos de exemplo são
-suficientes. Nunca publique `.env`, `.env.local`, tokens ou senhas reais.
-
-## Executar com Docker ou Podman
-
-### Linux com Podman
-
-No Linux nativo, execute como usuário normal:
+Ao copiar manualmente, troque `FIELD_ENCRYPTION_KEY` por uma chave própria:
 
 ```bash
-podman compose build
-podman compose up -d
-podman compose ps
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ```
 
-No Windows ou macOS, inicialize a máquina Podman uma vez:
+Nunca publique `.env`, `.env.local`, tokens ou senhas reais.
+
+## Desenvolvimento com hot reload
+
+`corepack pnpm start` faz tudo. Para controlar cada etapa:
 
 ```bash
-podman machine init
-podman machine start
-podman compose build
-podman compose up -d
+corepack pnpm start:infra
+corepack pnpm start:db
+corepack pnpm dev
 ```
 
-Se a máquina já existir, ignore o erro do `podman machine init` e execute apenas
-`podman machine start`.
+Ou, em três terminais separados na raiz:
 
-### Docker
+```bash
+corepack pnpm --filter @loopambiental/api dev
+```
+
+```bash
+corepack pnpm --filter @loopambiental/web dev
+```
+
+```bash
+corepack pnpm --filter @loopambiental/worker dev
+```
+
+Não use o modo containerizado e o modo hot reload ao mesmo tempo: ambos usam as
+portas `3000` e `3001`.
+
+## Executar tudo em containers
+
+O `docker-compose.yml` também empacota API, Web e Worker (imagens de produção):
 
 ```bash
 docker compose build
 docker compose up -d
+corepack pnpm db:migrate
 docker compose ps
 ```
 
-O Compose inicia API, frontend, worker, MySQL, Redis, MinIO e Mailpit. Os
-healthchecks aguardam as dependências antes de liberar API e frontend.
+Com Podman, troque `docker compose` por `podman compose`. No Windows e no macOS
+inicialize a máquina Podman uma vez com `podman machine init` e depois
+`podman machine start`.
 
-### Criar o banco
+As migrações rodam a partir do host (`localhost:3306`); dentro dos containers a
+API usa o hostname `mysql`. Defina `FIELD_ENCRYPTION_KEY` no `.env` antes do
+primeiro `up`: o Compose lê esse arquivo.
 
-Depois que o MySQL estiver saudável, execute na raiz do projeto:
-
-```bash
-corepack pnpm --filter @loopambiental/database generate
-corepack pnpm --filter @loopambiental/database db:deploy
-```
-
-Esses comandos usam `localhost` no host. Dentro dos containers, a API usa o
-hostname interno `mysql`, já configurado no Compose.
-
-O comando `db:deploy` aplica todas as migrações, incluindo o catálogo de
-referência (categorias e materiais). Não há dados de demonstração: crie a
-primeira conta em `/cadastro`. Para transformar seu usuário em administrador,
-ajuste o papel pela tabela `users` ou pelo `ADMIN_EMAILS` do `.env`.
-
-Ambientes novos devem usar `prisma migrate deploy`. Um banco existente criado
-com `db:push` deve registrar a linha de base com
-`prisma migrate resolve --applied 20260902000000_baseline` após validar que o
-schema está sincronizado e executar `prisma migrate deploy` para aplicar as
-migrações incrementais seguintes.
-
-### Endereços
-
-| Serviço       | Endereço                              |
-| ------------- | ------------------------------------- |
-| Frontend      | `http://localhost:3000`               |
-| API           | `http://localhost:3001`               |
-| Healthcheck   | `http://localhost:3001/api/v1/health` |
-| Mailpit       | `http://localhost:8025`               |
-| MinIO Console | `http://localhost:9001`               |
-
-### Administração
-
-O painel administrativo fica em `http://localhost:3000/admin` e reúne:
-
-- indicadores de usuários, empresas, anúncios, propostas e negociações;
-- volume comercial, pipeline e estimativa de comissão;
-- distribuição por status e categoria;
-- gestão de usuários, empresas, anúncios, assinaturas, pagamentos, auditoria e
-  configurações;
-- fila de moderação em `/admin/moderacao`;
-- substituição das quatro imagens do carrossel em `/admin/carrossel`.
-
-As telas administrativas por recurso ficam em `/admin/usuarios`,
-`/admin/empresas`, `/admin/anuncios`, `/admin/assinaturas`, `/admin/pagamentos`,
-`/admin/auditoria` e `/admin/configuracoes`. As listagens usam paginação por
-cursor (`nextCursor`).
-
-Somente administradores podem alterar papéis, status de empresas, remover
-anúncios, editar configurações e o carrossel. Administradores e moderadores podem
-decidir casos de moderação. Todas essas mutações exigem sessão, origem válida e
-são registradas na tabela `audit_logs` quando aplicável.
-
-As posições sem imagem personalizada usam as ilustrações incluídas no frontend.
-Imagens enviadas são limitadas a 5 MB, decodificadas e convertidas para WebP
-antes da publicação. O bucket permanece privado e a API entrega somente o
-conteúdo permitido.
-
-### Parar e limpar
+Parar e limpar:
 
 ```bash
 docker compose stop
 docker compose down
 ```
 
-Com Podman, substitua `docker compose` por `podman compose`. Não use `down -v`
-sem confirmação: ele apaga os volumes locais do MySQL e MinIO.
+Não use `down -v` sem ter certeza: ele apaga os volumes do MySQL e do MinIO.
 
-## Desenvolvimento com hot reload
+### Endereços
 
-O caminho mais simples é `corepack pnpm start`, que executa esta seção inteira
-(infraestrutura, migrações e os três processos). Se preferir controlar cada etapa
-manualmente, siga os passos abaixo.
+| Serviço       | Endereço                              |
+| ------------- | ------------------------------------- |
+| Frontend      | `http://localhost:3000`               |
+| API           | `http://localhost:3001/api/v1`        |
+| Healthcheck   | `http://localhost:3001/api/v1/health` |
+| Mailpit       | `http://localhost:8025`               |
+| MinIO Console | `http://localhost:9001`               |
 
-Use apenas as dependências de infraestrutura:
+## Banco de dados e migrações
 
-```bash
-docker compose up -d mysql redis minio mailpit
-```
+- MySQL 8.4 com Prisma; o schema fica em `packages/database/prisma/schema.prisma`.
+- `corepack pnpm db:migrate` aplica todas as migrações (`prisma migrate deploy`),
+  incluindo o catálogo de referência de categorias e materiais.
+- Para criar uma migração nova em desenvolvimento:
+  `corepack pnpm --filter @loopambiental/database db:migrate`.
+- Nunca edite uma migração já aplicada.
+- `schema.sql` na raiz é gerado a partir do schema Prisma e serve só como
+  referência; não o aplique manualmente.
 
-Com Podman, substitua `docker compose` por `podman compose`. Em seguida, abra
-três terminais na raiz:
-
-Terminal 1:
-
-```bash
-corepack pnpm --filter @loopambiental/api dev
-```
-
-Terminal 2:
-
-```bash
-corepack pnpm --filter @loopambiental/web dev
-```
-
-Terminal 3:
+Um banco antigo criado com `db:push` deve registrar a linha de base antes de
+receber as migrações incrementais:
 
 ```bash
-corepack pnpm --filter @loopambiental/worker dev
+corepack pnpm --filter @loopambiental/database exec tsx --env-file=../../.env node_modules/prisma/build/index.js migrate resolve --applied 20260902000000_baseline
+corepack pnpm db:migrate
 ```
 
-Ou inicie os três processos em paralelo:
+## Primeira conta e administração
 
-```bash
-corepack pnpm dev
-```
+Não há dados de demonstração. Cadastre-se em `/cadastro` e crie sua empresa.
+Para acesso administrativo, inclua seu e-mail em `ADMIN_EMAILS` no `.env` (ou
+altere `users.platform_role`).
 
-Não use o modo containerizado e o modo hot reload ao mesmo tempo, pois ambos
-usam as portas `3000` e `3001`.
+O painel fica em `/admin`: indicadores, moderação (`/admin/moderacao`),
+carrossel (`/admin/carrossel`), usuários, empresas, anúncios, assinaturas,
+pagamentos, auditoria e configurações. Somente administradores alteram papéis,
+status, configurações e carrossel; administradores e moderadores decidem casos
+de moderação. Toda mutação administrativa exige sessão e origem válida e é
+registrada em `audit_logs`.
 
-## Primeira conta
+## Variáveis de ambiente
 
-Não há seed. Cadastre-se em `/cadastro` e crie sua empresa. Para acesso
-administrativo, inclua o e-mail do usuário em `ADMIN_EMAILS` no `.env` ou
-atualize `users.platform_role` diretamente.
+`.env.example` lista todas as variáveis. As principais:
 
-## Variáveis importantes
+| Variável               | Uso                                                     |
+| ---------------------- | ------------------------------------------------------- |
+| `DATABASE_URL`         | Conexão MySQL                                           |
+| `REDIS_URL`            | Filas BullMQ (sem ela o worker faz polling do outbox)   |
+| `WEB_ORIGIN`           | Origem aceita pelo CORS/CSRF da API                     |
+| `WEB_PUBLIC_URL`       | URL pública do frontend (links de e-mail e retorno)     |
+| `API_PUBLIC_URL`       | URL pública da API (webhook do Mercado Pago)            |
+| `FIELD_ENCRYPTION_KEY` | Chave de criptografia do CNPJ — única por ambiente      |
+| `ADMIN_EMAILS`         | E-mails promovidos a administrador                      |
+| `SMTP_*`               | Envio de e-mail (Mailpit em desenvolvimento)            |
+| `STORAGE_*`            | Bucket S3/MinIO privado para fotos, laudos e documentos |
+| `MP_*`                 | Credenciais do Mercado Pago                             |
+| `NEXT_PUBLIC_API_URL`  | URL da API usada pelo frontend (`apps/web/.env.local`)  |
 
-O arquivo `.env.example` contém todos os nomes usados pela API. Os principais:
+Não troque `FIELD_ENCRYPTION_KEY` de um banco que já tem empresas cadastradas:
+os CNPJs criptografados com a chave antiga deixam de ser legíveis.
 
-```env
-DATABASE_URL="mysql://loopambiental:loopambiental_local@localhost:3306/loopambiental"
-PORT=3001
-WEB_ORIGIN="http://localhost:3000"
-SMTP_HOST="localhost"
-SMTP_PORT=1025
-WEB_PUBLIC_URL="http://localhost:3000"
-FIELD_ENCRYPTION_KEY="configure-a-strong-secret-in-production"
-STORAGE_ENDPOINT="http://localhost:9000"
-STORAGE_BUCKET="loopambiental-listings"
-STORAGE_ACCESS_KEY="loopambiental"
-STORAGE_SECRET_KEY="loopambiental_local"
-```
-
-Para habilitar checkout Mercado Pago, configure também `MP_ACCESS_TOKEN`,
-`MP_WEBHOOK_SECRET` e `MP_API_URL`.
-
-As fotos de anúncios são armazenadas no MinIO local. A API aceita até cinco
-imagens JPEG, PNG ou WebP de 5 MB, decodifica e converte o conteúdo para WebP e
-mantém os objetos privados. Somente fotos de anúncios publicados têm leitura
-pública; prévias e moderação exigem sessão autorizada.
-
-No fluxo inicial de negociação, a empresa anunciante pode enviar uma
-contraproposta e a empresa proponente pode aceitá-la ou rejeitá-la. Rodadas
-alternadas adicionais ficam fora deste primeiro fluxo para manter explícita a
-parte responsável pela próxima decisão.
-
-## Comandos de validação
-
-Execute na raiz:
+## Testes e validação
 
 ```bash
 corepack pnpm lint
 corepack pnpm typecheck
 corepack pnpm test
 corepack pnpm build
-corepack pnpm --filter @loopambiental/database db:validate
 ```
 
-A API possui testes unitários (Jest) e o frontend possui testes unitários
-(Vitest). Os testes E2E usam Playwright e exigem a stack em execução:
+A API usa Jest e o frontend usa Vitest. Os testes E2E (Playwright) exigem a
+stack rodando:
 
 ```bash
-corepack pnpm exec playwright install chromium   # uma vez
+corepack pnpm exec playwright install chromium
 corepack pnpm test:e2e
 ```
 
-O worker usa `REDIS_URL`. Sem essa variável, ele processa o outbox por polling.
-Com `REDIS_URL`, usa BullMQ. Os e-mails capturados ficam disponíveis no Mailpit.
+Se o `typecheck` ou os testes da API reclamarem de tipos do Prisma
+(`PrismaClientKnownRequestError`, `InputJsonValue`), rode
+`corepack pnpm db:generate`.
 
 ## Diagnóstico
-
-Ver estado e logs:
 
 ```bash
 docker compose ps
 docker compose logs api
-docker compose logs web
 docker compose logs mysql
 ```
 
-Com Podman, substitua `docker compose` por `podman compose`.
-
 Se a API não iniciar:
 
-1. Confirme que o MySQL está `healthy`.
-2. Verifique se `DATABASE_URL` existe no `.env`.
-3. Execute `db:push` antes de usar os dados da aplicação.
-4. Consulte `http://localhost:3001/api/v1/health`.
+1. confirme que o MySQL está `healthy`;
+2. confira se `DATABASE_URL` existe no `.env`;
+3. rode `corepack pnpm db:migrate`;
+4. acesse `http://localhost:3001/api/v1/health`.
 
-Se houver erro de permissão no Linux com SELinux, prefira os volumes nomeados já
-configurados. Para adicionar bind mounts, use `:Z` quando o volume for exclusivo
-do container ou `:z` quando for compartilhado.
-
-Para verificar portas no Windows PowerShell:
+Portas ocupadas:
 
 ```powershell
-Get-NetTCPConnection -LocalPort 3000,3001,3306,6379 -ErrorAction SilentlyContinue
+# Windows PowerShell
+Get-NetTCPConnection -LocalPort 3000,3001,3306,6379,9000,9001,1025,8025 -ErrorAction SilentlyContinue
 ```
-
-Para Linux/macOS:
 
 ```bash
+# Linux/macOS
 ss -ltnp | grep -E ':3000|:3001|:3306|:6379|:9000|:9001|:1025|:8025'
 ```
+
+No Linux com SELinux, prefira os volumes nomeados do Compose. Para bind mounts,
+use `:Z` (exclusivo do container) ou `:z` (compartilhado).
 
 ## Estrutura
 
 ```text
-apps/api          API NestJS
-apps/web          Frontend Next.js
-apps/worker       Worker de jobs
-packages/database Prisma schema e client
-infra/docker      Containerfiles OCI
-infra/scripts     Script de inicialização (`start.mjs`)
-docker-compose.yml Stack local Docker/Podman
-schema.sql        Provisionamento manual MySQL
+apps/api            API NestJS (REST /api/v1)
+apps/web            Frontend Next.js (App Router)
+apps/worker         Worker de jobs (outbox + BullMQ)
+packages/database   Prisma schema, migrações e client
+infra/docker        Containerfiles OCI
+infra/scripts       start.mjs (inicialização multiplataforma)
+e2e                 Testes Playwright
+docs                ADRs e auditorias
+docker-compose.yml  Stack local Docker/Podman
+schema.sql          DDL de referência gerado do schema Prisma
 ```
 
 ## Pendências antes de produção
 
-- Rate limiting, MFA para administradores e observabilidade completos.
-- Upload seguro com scanner assíncrono.
-- Cobrança real das assinaturas e dos desbloqueios avulsos no adapter de pagamento.
+- MFA para administradores e observabilidade completa.
+- Scanner antivírus assíncrono para fotos, laudos e documentos.
+- Cobrança real das assinaturas e dos desbloqueios avulsos de contato.
 - Validação de pagamentos em sandbox.
+- Transição de negociação para `COMPLETED` (pré-requisito das avaliações).
 - Backups, retenção e plano de rollback.
 - Revisão jurídica e LGPD.

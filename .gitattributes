@@ -1,0 +1,13 @@
+# Normaliza finais de linha para LF em todos os sistemas (Windows inclusive).
+# Evita falhas do Prettier (endOfLine: lf) e checksums diferentes nas
+# migrações SQL do Prisma quando o repositório é clonado no Windows.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

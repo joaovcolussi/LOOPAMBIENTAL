@@ -3,15 +3,18 @@
   "private": true,
   "packageManager": "pnpm@9.15.5",
   "scripts": {
-    "start": "node infra/scripts/start.mjs start",
+    "start": "node infra/scripts/start.mjs",
     "start:infra": "node infra/scripts/start.mjs infra",
     "start:db": "node infra/scripts/start.mjs db",
-    "dev": "corepack pnpm --parallel --filter ./apps/* dev",
+    "stop": "node infra/scripts/start.mjs stop",
+    "dev": "corepack pnpm --parallel --filter \"./apps/*\" dev",
     "build": "corepack pnpm -r --if-present build",
     "lint": "corepack pnpm -r --if-present lint",
     "typecheck": "corepack pnpm -r --if-present typecheck",
     "test": "corepack pnpm -r --if-present test",
     "test:e2e": "playwright test",
+    "db:generate": "corepack pnpm --filter @loopambiental/database generate",
+    "db:migrate": "corepack pnpm --filter @loopambiental/database db:deploy",
     "format": "prettier --write ."
   },
   "devDependencies": {
