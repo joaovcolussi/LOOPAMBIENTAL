@@ -103,6 +103,11 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @loopambiental/database generate
 
+      # Scripts load ../../.env via --env-file; values exported by this job
+      # take precedence over the file, which only fills the remaining defaults.
+      - name: Create .env from example
+        run: cp .env.example .env
+
       - name: Apply migrations
         run: pnpm --filter @loopambiental/database db:deploy
 
