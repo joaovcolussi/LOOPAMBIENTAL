@@ -4044,3 +4044,84 @@ h3 {
   gap: 10px;
   justify-content: flex-end;
 }
+
+/* Laudos e documentos técnicos de anúncios */
+.listing-document-fieldset {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+}
+.listing-document-fieldset legend {
+  padding: 0 6px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.listing-document-section {
+  display: grid;
+  gap: 12px;
+  margin: 24px 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.listing-document-section h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.listing-document-picker {
+  display: grid;
+  gap: 10px;
+}
+.listing-document-picker label {
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.listing-document-picker > button {
+  justify-self: start;
+}
+.listing-document-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.listing-document-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 10px 12px;
+}
+.listing-document-list li > div {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.listing-document-list li span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.listing-document-list li .document-expired {
+  color: var(--danger);
+  font-weight: 700;
+}
+@media (max-width: 640px) {
+  .listing-document-list li {
+    flex-wrap: wrap;
+  }
+  .listing-document-list li > div {
+    flex-basis: calc(100% - 30px);
+  }
+}

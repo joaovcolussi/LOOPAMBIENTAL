@@ -50,6 +50,7 @@ export const listingReasonLabels: Record<string, string> = {
   LISTING_SUBMITTED: 'Enviado para análise',
   LISTING_EDITED: 'Editado — voltou para análise',
   LISTING_MEDIA_ADDED: 'Fotos alteradas — voltou para análise',
+  LISTING_DOCUMENT_ADDED: 'Laudo adicionado — voltou para análise',
   MODERATION_APPROVED: 'Aprovado pela moderação',
   MODERATION_REJECTED: 'Rejeitado pela moderação',
   LISTING_PAUSED: 'Anúncio pausado',
@@ -201,4 +202,11 @@ export const moderationCaseStatusLabels: Record<string, string> = {
   IN_REVIEW: 'Em análise',
   APPROVED: 'Aprovado',
   REJECTED: 'Rejeitado',
+};
+
+export const listingDocumentTypeLabels: Record<string, string> = {
+  TECHNICAL_REPORT: 'Laudo técnico',
+  LAB_ANALYSIS: 'Laudo de análise laboratorial',
+  SAFETY_DATA_SHEET: 'FDS / FISPQ',
+  OTHER: 'Outro documento técnico',
 };

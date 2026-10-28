@@ -4,7 +4,19 @@ import { ArrowLeft, Recycle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { SessionActions } from '../../../../components/session-actions';
-import { api, ListingDetail, listingMediaUrl } from '../../../../lib/api';
+import {
+  api,
+  ListingDetail,
+  ListingDocument,
+  listingDocumentUrl,
+  listingMediaUrl,
+} from '../../../../lib/api';
+import {
+  ListingDocumentList,
+  ListingDocumentPicker,
+  MAX_LISTING_DOCUMENTS,
+  PendingListingDocument,
+} from '../../../../components/listing-documents';
 import { formatMoney, formatQuantity } from '../../../../lib/format';
 import {
   listingReasonLabels,
@@ -21,6 +33,7 @@ export default function OwnedListingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [removingId, setRemovingId] = useState('');
 
   function load() {
     return api
@@ -53,6 +66,46 @@ export default function OwnedListingPage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function addDocument(document: PendingListingDocument) {
+    setSaving(true);
+    setMessage('');
+    try {
+      await api.uploadListingDocument(params.id, document);
+      await load();
+      setMessage(
+        listing?.status === 'PUBLISHED'
+          ? 'Laudo anexado. O anúncio voltou para análise da moderação.'
+          : 'Laudo anexado.',
+      );
+    } catch (caught) {
+      const code = caught instanceof Error ? caught.message : '';
+      setMessage(
+        code === 'DOCUMENT_LIMIT_EXCEEDED'
+          ? `Limite de ${MAX_LISTING_DOCUMENTS} laudos por anúncio atingido.`
+          : code === 'INVALID_DOCUMENT_VALIDITY'
+            ? 'Data de validade inválida.'
+            : 'Não foi possível anexar o laudo. Envie PDF, JPEG, PNG ou WebP de até 10 MB.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeDocument(document: ListingDocument) {
+    if (!window.confirm(`Remover o laudo "${document.fileName}"?`)) return;
+    setRemovingId(document.id);
+    setMessage('');
+    try {
+      await api.removeListingDocument(params.id, document.id);
+      await load();
+      setMessage('Laudo removido.');
+    } catch {
+      setMessage('Não foi possível remover o laudo.');
+    } finally {
+      setRemovingId('');
     }
   }
 
@@ -156,6 +209,30 @@ export default function OwnedListingPage() {
               Enviar fotos
             </button>
           </form>
+          <section
+            className="listing-document-section"
+            aria-labelledby="documents-title"
+          >
+            <h2 id="documents-title">Laudos e documentos técnicos</h2>
+            <ListingDocumentList
+              documents={listing.documents}
+              hrefFor={(id) => listingDocumentUrl(id, true)}
+              onRemove={
+                listing.status !== 'CLOSED' && listing.status !== 'ARCHIVED'
+                  ? removeDocument
+                  : undefined
+              }
+              removingId={removingId}
+            />
+            {listing.status !== 'CLOSED' && listing.status !== 'ARCHIVED' && (
+              <ListingDocumentPicker
+                disabled={saving}
+                remaining={MAX_LISTING_DOCUMENTS - listing.documents.length}
+                submitLabel="Anexar laudo"
+                onAdd={addDocument}
+              />
+            )}
+          </section>
           {listing.status === 'DRAFT' && (
             <button
               className="button small"

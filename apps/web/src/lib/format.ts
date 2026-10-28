@@ -23,3 +23,25 @@ export function currencyInputToDecimal(value: string) {
   if (!digits) return '';
   return (Number(digits) / 100).toFixed(2);
 }
+
+export function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024)
+    return `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(bytes / 1024)} KB`;
+  return `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(bytes / (1024 * 1024))} MB`;
+}
+
+/** Formats a date-only value (YYYY-MM-DD or ISO at UTC midnight) without timezone drift. */
+export function formatDateOnly(value: string) {
+  const [year, month, day] = value.slice(0, 10).split('-');
+  return `${day}/${month}/${year}`;
+}
+
+export function isDateOnlyExpired(value: string, today = new Date()) {
+  const todayKey = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0'),
+  ].join('-');
+  return value.slice(0, 10) < todayKey;
+}

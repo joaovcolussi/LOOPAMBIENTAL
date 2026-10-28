@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
+import { attachmentDisposition } from '../../common/content-disposition';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 import { AdminMutationGuard } from '../auth/admin-mutation.guard';
@@ -74,7 +75,7 @@ export class CompanyDocumentController {
     );
     response.setHeader(
       'Content-Disposition',
-      `attachment; filename="${encodeURIComponent(document.fileName)}"`,
+      attachmentDisposition(document.fileName),
     );
     return new StreamableFile(document.buffer, { type: document.mimeType });
   }

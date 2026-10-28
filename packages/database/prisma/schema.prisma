@@ -235,6 +235,15 @@ enum ListingMediaStatus {
   @@map("listing_media_status")
 }
 
+enum ListingDocumentType {
+  TECHNICAL_REPORT
+  LAB_ANALYSIS
+  SAFETY_DATA_SHEET
+  OTHER
+
+  @@map("listing_document_type")
+}
+
 enum ContactVisibility {
   PRIVATE
   MEMBERS
@@ -327,6 +336,7 @@ model User {
   logisticsRequests        LogisticsRequest[]
   logisticsQuotes          LogisticsQuote[]
   listingMedia             ListingMedia[]
+  listingDocuments         ListingDocument[]
   carouselSlidesUpdated    HomeCarouselSlide[]       @relation("carousel_slide_updater")
   auditLogs                AuditLog[]
   companyDocumentsUploaded CompanyDocument[]         @relation("company_document_uploader")
@@ -651,6 +661,7 @@ model Listing {
   deals              Deal[]
   conversations      Conversation[]         @relation("listing_conversations")
   media              ListingMedia[]
+  documents          ListingDocument[]
   reports            Report[]               @relation("report_listing")
   statusHistory      ListingStatusHistory[] @relation("listing_status_history")
   contactUnlocks     ContactUnlock[]        @relation("listing_contact_unlocks")
@@ -683,6 +694,29 @@ model ListingMedia {
   @@index([listingId, status, sortOrder])
   @@index([uploadedByUserId])
   @@map("listing_media")
+}
+
+model ListingDocument {
+  id               String              @id @default(uuid()) @db.VarChar(36)
+  listingId        String              @map("listing_id") @db.VarChar(36)
+  uploadedByUserId String              @map("uploaded_by_user_id") @db.VarChar(36)
+  type             ListingDocumentType @default(TECHNICAL_REPORT)
+  fileName         String              @map("file_name") @db.VarChar(255)
+  storageKey       String              @unique @map("storage_key") @db.VarChar(255)
+  mimeType         String              @map("mime_type") @db.VarChar(80)
+  sizeBytes        Int                 @map("size_bytes")
+  sha256           String              @db.Char(64)
+  validUntil       DateTime?           @map("valid_until") @db.Date
+  status           ListingMediaStatus  @default(READY)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt        DateTime?           @map("deleted_at") @db.DateTime(3)
+  listing          Listing             @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  uploadedBy       User                @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([listingId, deletedAt, status])
+  @@index([uploadedByUserId])
+  @@map("listing_documents")
 }
 
 model HomeCarouselSlide {
