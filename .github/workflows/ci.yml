@@ -117,16 +117,24 @@ jobs:
         run: pnpm --filter @loopambiental/database db:deploy
 
       # MinIO needs a "server" command, which service containers cannot set.
+      # minio/minio was removed from Docker Hub; try the official mirrors.
       - name: Start MinIO
         run: |
+          for image in quay.io/minio/minio:latest cgr.dev/chainguard/minio:latest; do
+            if docker pull "$image"; then MINIO_IMAGE="$image"; break; fi
+          done
+          test -n "$MINIO_IMAGE"
+          echo "Using $MINIO_IMAGE"
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=loopambiental \
             -e MINIO_ROOT_PASSWORD=loopambiental_local \
-            minio/minio:latest server /data
+            "$MINIO_IMAGE" server /data
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then break; fi
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then exit 0; fi
             sleep 1
           done
+          docker logs minio
+          exit 1
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
