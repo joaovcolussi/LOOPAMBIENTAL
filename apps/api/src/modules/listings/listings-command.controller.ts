@@ -2,17 +2,24 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
+  HttpCode,
   Param,
   Patch,
   Post,
   Req,
+  UploadedFile,
   UploadedFiles,
   UseInterceptors,
   UseGuards,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
-import { ListingInput, ListingsService } from './listings.service';
+import {
+  LISTING_DOCUMENT_TYPES,
+  ListingInput,
+  ListingsService,
+} from './listings.service';
 import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 
 type ListingBody = {
@@ -79,6 +86,48 @@ export class ListingsCommandController {
         files ?? [],
       ),
     };
+  }
+  @Post(':id/documents')
+  @UseInterceptors(
+    FileInterceptor('document', {
+      limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+      // Browsers send UTF-8 file names; busboy defaults to latin1.
+      defParamCharset: 'utf8',
+    }),
+  )
+  async addDocument(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() body: { type?: unknown; validUntil?: unknown },
+  ): Promise<unknown> {
+    const type =
+      body.type === undefined || body.type === ''
+        ? 'TECHNICAL_REPORT'
+        : this.enumValue(body.type, LISTING_DOCUMENT_TYPES);
+    if (!type) throw new BadRequestException('INVALID_DOCUMENT_TYPE_VALUE');
+    if (
+      body.validUntil !== undefined &&
+      (typeof body.validUntil !== 'string' || body.validUntil.length > 10)
+    )
+      throw new BadRequestException('INVALID_DOCUMENT_VALIDITY');
+    return {
+      document: await this.listingsService.addDocument(
+        request.user.id,
+        id,
+        file,
+        { type, validUntil: body.validUntil || undefined },
+      ),
+    };
+  }
+  @Delete(':id/documents/:documentId')
+  @HttpCode(204)
+  async removeDocument(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('documentId') documentId: string,
+  ): Promise<void> {
+    await this.listingsService.removeDocument(request.user.id, id, documentId);
   }
   @Patch(':id')
   async update(

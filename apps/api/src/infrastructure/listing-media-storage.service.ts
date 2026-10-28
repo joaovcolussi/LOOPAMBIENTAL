@@ -16,7 +16,7 @@ const sharp = require('sharp') as typeof import('sharp').default;
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
-const DOCUMENT_PREFIX = 'company-documents';
+type DocumentPrefix = 'company-documents' | 'listing-documents';
 
 @Injectable()
 export class ListingMediaStorageService {
@@ -55,12 +55,15 @@ export class ListingMediaStorageService {
     return this.uploadImage(file, 'home-carousel', true);
   }
 
-  async uploadDocument(file: Express.Multer.File) {
+  async uploadDocument(
+    file: Express.Multer.File,
+    prefix: DocumentPrefix = 'company-documents',
+  ) {
     if (!file.buffer?.length || file.size > MAX_DOCUMENT_SIZE)
       throw new BadRequestException('INVALID_DOCUMENT_SIZE');
     const detected = await this.detectDocument(file.buffer);
     await this.ensureBucket();
-    const storageKey = `${DOCUMENT_PREFIX}/${randomUUID()}.${detected.extension}`;
+    const storageKey = `${prefix}/${randomUUID()}.${detected.extension}`;
     try {
       await this.client.send(
         new PutObjectCommand({
@@ -76,7 +79,10 @@ export class ListingMediaStorageService {
       throw new ServiceUnavailableException('STORAGE_UNAVAILABLE');
     }
     return {
-      fileName: this.sanitizeFileName(file.originalname),
+      fileName: this.withExtension(
+        this.sanitizeFileName(file.originalname),
+        detected.extension,
+      ),
       storageKey,
       mimeType: detected.mimeType,
       sizeBytes: detected.buffer.length,
@@ -124,9 +130,20 @@ export class ListingMediaStorageService {
     }
   }
 
+  // Images are re-encoded to WebP, so the download name must follow suit.
+  private withExtension(fileName: string, extension: string) {
+    const base = fileName.replace(/\.[^.]*$/, '') || 'documento';
+    return `${base.slice(0, 250)}.${extension}`;
+  }
+
   private sanitizeFileName(value: string) {
     const base = value.split(/[\\/]/).pop() ?? 'documento';
-    const clean = base.replace(/[^\w.\- ]+/g, '_').trim();
+    // Keep accented letters (e.g. "Laudo técnico.pdf"); drop control and
+    // path characters. Content-Disposition encodes the name safely.
+    const clean = base
+      .normalize('NFC')
+      .replace(/[^\p{L}\p{N}._\- ()]+/gu, '_')
+      .trim();
     return (clean || 'documento').slice(0, 255);
   }
 

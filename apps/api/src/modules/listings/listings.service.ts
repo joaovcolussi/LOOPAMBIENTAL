@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import type { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { ListingMediaStorageService } from '../../infrastructure/listing-media-storage.service';
 
@@ -28,6 +29,36 @@ export type ListingInput = {
   state?: string;
   latitude?: number;
   longitude?: number;
+};
+
+export const LISTING_DOCUMENT_TYPES = [
+  'TECHNICAL_REPORT',
+  'LAB_ANALYSIS',
+  'SAFETY_DATA_SHEET',
+  'OTHER',
+] as const;
+export type ListingDocumentType = (typeof LISTING_DOCUMENT_TYPES)[number];
+export type ListingDocumentInput = {
+  type: ListingDocumentType;
+  validUntil?: string;
+};
+
+const MAX_LISTING_PHOTOS = 5;
+const MAX_LISTING_DOCUMENTS = 5;
+
+export const listingDocumentSelect = {
+  id: true,
+  type: true,
+  fileName: true,
+  mimeType: true,
+  sizeBytes: true,
+  validUntil: true,
+  createdAt: true,
+} as const;
+
+export const activeDocumentsWhere = {
+  status: 'READY' as const,
+  deletedAt: null,
 };
 
 const listingSelect = {
@@ -75,6 +106,11 @@ const listingSelect = {
 
 const listingDetailSelect = {
   ...listingSelect,
+  documents: {
+    where: activeDocumentsWhere,
+    orderBy: { createdAt: 'asc' as const },
+    select: listingDocumentSelect,
+  },
   company: {
     select: {
       id: true,
@@ -267,7 +303,7 @@ export class ListingsService {
     const existingCount = await this.prisma.listingMedia.count({
       where: { listingId: id, status: 'READY' },
     });
-    if (existingCount + files.length > 5)
+    if (existingCount + files.length > MAX_LISTING_PHOTOS)
       throw new BadRequestException('IMAGE_LIMIT_EXCEEDED');
 
     const uploads: {
@@ -295,22 +331,13 @@ export class ListingsService {
             }),
           ),
         );
-        if (listing.status === 'PUBLISHED') {
-          await transaction.listing.update({
-            where: { id },
-            data: { status: 'PENDING_REVIEW', publishedAt: null },
-          });
-          await transaction.moderationCase.create({ data: { listingId: id } });
-          await transaction.listingStatusHistory.create({
-            data: {
-              listingId: id,
-              fromStatus: 'PUBLISHED',
-              toStatus: 'PENDING_REVIEW',
-              actorUserId: userId,
-              reason: 'LISTING_MEDIA_ADDED',
-            },
-          });
-        }
+        if (listing.status === 'PUBLISHED')
+          await this.returnToReview(
+            transaction,
+            id,
+            userId,
+            'LISTING_MEDIA_ADDED',
+          );
         return media;
       });
     } catch (error) {
@@ -375,6 +402,177 @@ export class ListingsService {
     return {
       buffer: await this.mediaStorage.read(media.storageKey),
       mimeType: media.mimeType,
+    };
+  }
+
+  async addDocument(
+    userId: string,
+    id: string,
+    file: Express.Multer.File | undefined,
+    input: ListingDocumentInput,
+  ): Promise<unknown> {
+    const listing = await this.getListing(id);
+    await this.assertCanManage(
+      userId,
+      listing.companyId,
+      listing.createdByUserId,
+    );
+    if (listing.status === 'CLOSED' || listing.status === 'ARCHIVED')
+      throw new BadRequestException('LISTING_NOT_EDITABLE');
+    if (!file) throw new BadRequestException('DOCUMENT_REQUIRED');
+    const validUntil = this.parseOptionalDate(input.validUntil);
+    // Cheap pre-check before the upload; the authoritative check runs again
+    // under the listing row lock below.
+    if (
+      (await this.prisma.listingDocument.count({
+        where: { listingId: id, ...activeDocumentsWhere },
+      })) >= MAX_LISTING_DOCUMENTS
+    )
+      throw new BadRequestException('DOCUMENT_LIMIT_EXCEEDED');
+
+    const upload = await this.mediaStorage.uploadDocument(
+      file,
+      'listing-documents',
+    );
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        // Serializes concurrent uploads to the same listing so the limit holds.
+        await transaction.$queryRaw`SELECT id FROM listings WHERE id = ${id} FOR UPDATE`;
+        const existing = await transaction.listingDocument.count({
+          where: { listingId: id, ...activeDocumentsWhere },
+        });
+        if (existing >= MAX_LISTING_DOCUMENTS)
+          throw new BadRequestException('DOCUMENT_LIMIT_EXCEEDED');
+        const document = await transaction.listingDocument.create({
+          data: {
+            listingId: id,
+            uploadedByUserId: userId,
+            type: input.type,
+            validUntil,
+            ...upload,
+          },
+          select: listingDocumentSelect,
+        });
+        if (listing.status === 'PUBLISHED')
+          await this.returnToReview(
+            transaction,
+            id,
+            userId,
+            'LISTING_DOCUMENT_ADDED',
+          );
+        return document;
+      });
+    } catch (error) {
+      await this.mediaStorage.remove(upload.storageKey);
+      throw error;
+    }
+  }
+
+  async removeDocument(
+    userId: string,
+    listingId: string,
+    documentId: string,
+  ): Promise<void> {
+    const listing = await this.getListing(listingId);
+    await this.assertCanManage(
+      userId,
+      listing.companyId,
+      listing.createdByUserId,
+    );
+    if (listing.status === 'CLOSED' || listing.status === 'ARCHIVED')
+      throw new BadRequestException('LISTING_NOT_EDITABLE');
+    await this.prisma.$transaction(async (transaction) => {
+      // Soft delete: the report may back an existing negotiation, so the file
+      // and its metadata are retained for audit but no longer listed or served.
+      const removed = await transaction.listingDocument.updateMany({
+        where: { id: documentId, listingId, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+      if (removed.count !== 1)
+        throw new NotFoundException('LISTING_DOCUMENT_NOT_FOUND');
+      // The listing may have been approved because of this report.
+      if (listing.status === 'PUBLISHED')
+        await this.returnToReview(
+          transaction,
+          listingId,
+          userId,
+          'LISTING_DOCUMENT_REMOVED',
+        );
+    });
+  }
+
+  /**
+   * Any signed-in user can read reports of a published listing; once the
+   * listing is under negotiation only companies with an accepted proposal keep
+   * access, so the counterparty can still check the material.
+   */
+  async readPublishedDocument(userId: string, documentId: string) {
+    return this.readDocument({
+      id: documentId,
+      listing: {
+        deletedAt: null,
+        OR: [
+          { status: 'PUBLISHED' },
+          {
+            status: 'NEGOTIATING',
+            proposals: {
+              some: {
+                status: 'ACCEPTED',
+                proposerCompany: { members: { some: { userId } } },
+              },
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  async readOwnedDocument(userId: string, documentId: string) {
+    const document = await this.prisma.listingDocument.findFirst({
+      where: { id: documentId, ...activeDocumentsWhere },
+      select: {
+        storageKey: true,
+        mimeType: true,
+        fileName: true,
+        listing: { select: { companyId: true, createdByUserId: true } },
+      },
+    });
+    if (!document) throw new NotFoundException('LISTING_DOCUMENT_NOT_FOUND');
+    await this.assertCanManage(
+      userId,
+      document.listing.companyId,
+      document.listing.createdByUserId,
+    );
+    return this.loadDocument(document);
+  }
+
+  async readModerationDocument(documentId: string) {
+    return this.readDocument({
+      id: documentId,
+      listing: {
+        moderationCases: { some: { status: { in: ['OPEN', 'IN_REVIEW'] } } },
+      },
+    });
+  }
+
+  private async readDocument(where: Prisma.ListingDocumentWhereInput) {
+    const document = await this.prisma.listingDocument.findFirst({
+      where: { ...where, ...activeDocumentsWhere },
+      select: { storageKey: true, mimeType: true, fileName: true },
+    });
+    if (!document) throw new NotFoundException('LISTING_DOCUMENT_NOT_FOUND');
+    return this.loadDocument(document);
+  }
+
+  private async loadDocument(document: {
+    storageKey: string;
+    mimeType: string;
+    fileName: string;
+  }) {
+    return {
+      buffer: await this.mediaStorage.read(document.storageKey),
+      mimeType: document.mimeType,
+      fileName: document.fileName,
     };
   }
 
@@ -584,6 +782,41 @@ export class ListingsService {
     });
   }
 
+  private async returnToReview(
+    transaction: Prisma.TransactionClient,
+    id: string,
+    userId: string,
+    reason: string,
+  ) {
+    const changed = await transaction.listing.updateMany({
+      where: { id, status: 'PUBLISHED' },
+      data: { status: 'PENDING_REVIEW', publishedAt: null },
+    });
+    if (changed.count !== 1)
+      throw new ConflictException('LISTING_STATE_CHANGED');
+    await transaction.moderationCase.create({ data: { listingId: id } });
+    await transaction.listingStatusHistory.create({
+      data: {
+        listingId: id,
+        fromStatus: 'PUBLISHED',
+        toStatus: 'PENDING_REVIEW',
+        actorUserId: userId,
+        reason,
+      },
+    });
+  }
+  private parseOptionalDate(value?: string) {
+    if (!value) return undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value))
+      throw new BadRequestException('INVALID_DOCUMENT_VALIDITY');
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (
+      Number.isNaN(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== value
+    )
+      throw new BadRequestException('INVALID_DOCUMENT_VALIDITY');
+    return date;
+  }
   private async getListing(id: string) {
     const listing = await this.prisma.listing.findFirst({
       where: { id, deletedAt: null },

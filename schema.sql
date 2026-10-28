@@ -1,3 +1,7 @@
+-- Gerado a partir de packages/database/prisma/schema.prisma (somente referência).
+-- Não aplique manualmente: use `corepack pnpm db:migrate` (prisma migrate deploy).
+-- Regenerar: npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script
+
 -- CreateTable
 CREATE TABLE `users` (
     `id` VARCHAR(36) NOT NULL,
@@ -25,16 +29,19 @@ CREATE TABLE `sessions` (
     `user_agent` VARCHAR(500) NULL,
     `ip_address` VARCHAR(64) NULL,
     `expires_at` DATETIME(3) NOT NULL,
+    `absolute_expires_at` DATETIME(3) NOT NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     UNIQUE INDEX `sessions_token_hash_key`(`token_hash`),
     INDEX `sessions_user_id_expires_at_idx`(`user_id`, `expires_at`),
+    INDEX `sessions_expires_at_idx`(`expires_at`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `companies` (
     `id` VARCHAR(36) NOT NULL,
+    `slug` VARCHAR(220) NULL,
     `legal_name` VARCHAR(200) NOT NULL,
     `trade_name` VARCHAR(200) NULL,
     `tax_id_hash` VARCHAR(128) NULL,
@@ -52,10 +59,15 @@ CREATE TABLE `companies` (
     `address_district` VARCHAR(120) NULL,
     `address_postal_code` VARCHAR(12) NULL,
     `contact_visibility` ENUM('PRIVATE', 'MEMBERS', 'PUBLIC') NOT NULL DEFAULT 'PRIVATE',
+    `latitude` DECIMAL(10, 7) NULL,
+    `longitude` DECIMAL(10, 7) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
+    `rating_average` DECIMAL(3, 2) NOT NULL DEFAULT 0,
+    `rating_count` INTEGER NOT NULL DEFAULT 0,
 
+    UNIQUE INDEX `companies_slug_key`(`slug`),
     UNIQUE INDEX `companies_tax_id_hash_key`(`tax_id_hash`),
     INDEX `companies_status_verification_idx`(`status`, `verification`),
     PRIMARY KEY (`id`)
@@ -70,6 +82,148 @@ CREATE TABLE `company_members` (
 
     INDEX `company_members_user_id_idx`(`user_id`),
     PRIMARY KEY (`company_id`, `user_id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `company_documents` (
+    `id` VARCHAR(36) NOT NULL,
+    `company_id` VARCHAR(36) NOT NULL,
+    `uploaded_by_user_id` VARCHAR(36) NOT NULL,
+    `type` ENUM('CNPJ_CARD', 'SOCIAL_CONTRACT', 'ADDRESS_PROOF', 'OPERATING_LICENSE', 'ENVIRONMENTAL_LICENSE', 'OTHER') NOT NULL,
+    `file_name` VARCHAR(255) NOT NULL,
+    `storage_key` VARCHAR(255) NOT NULL,
+    `mime_type` VARCHAR(80) NOT NULL,
+    `size_bytes` INTEGER NOT NULL,
+    `sha256` CHAR(64) NOT NULL,
+    `status` ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING',
+    `reviewed_by_user_id` VARCHAR(36) NULL,
+    `reviewed_at` DATETIME(3) NULL,
+    `review_notes` TEXT NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `company_documents_storage_key_key`(`storage_key`),
+    INDEX `company_documents_company_id_status_idx`(`company_id`, `status`),
+    INDEX `company_documents_uploaded_by_user_id_idx`(`uploaded_by_user_id`),
+    INDEX `company_documents_reviewed_by_user_id_idx`(`reviewed_by_user_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `company_verifications` (
+    `id` VARCHAR(36) NOT NULL,
+    `company_id` VARCHAR(36) NOT NULL,
+    `requested_by_user_id` VARCHAR(36) NOT NULL,
+    `status` ENUM('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED') NOT NULL DEFAULT 'PENDING',
+    `notes` TEXT NULL,
+    `review_notes` TEXT NULL,
+    `reviewed_by_user_id` VARCHAR(36) NULL,
+    `reviewed_at` DATETIME(3) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    INDEX `company_verifications_company_id_status_idx`(`company_id`, `status`),
+    INDEX `company_verifications_status_created_at_idx`(`status`, `created_at`),
+    INDEX `company_verifications_requested_by_user_id_idx`(`requested_by_user_id`),
+    INDEX `company_verifications_reviewed_by_user_id_idx`(`reviewed_by_user_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `company_invitations` (
+    `id` VARCHAR(36) NOT NULL,
+    `company_id` VARCHAR(36) NOT NULL,
+    `email` VARCHAR(320) NOT NULL,
+    `role` ENUM('OWNER', 'ADMIN', 'MEMBER') NOT NULL DEFAULT 'MEMBER',
+    `invited_by_user_id` VARCHAR(36) NOT NULL,
+    `token_hash` VARCHAR(128) NOT NULL,
+    `status` ENUM('PENDING', 'ACCEPTED', 'EXPIRED', 'REVOKED') NOT NULL DEFAULT 'PENDING',
+    `expires_at` DATETIME(3) NOT NULL,
+    `accepted_at` DATETIME(3) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `company_invitations_token_hash_key`(`token_hash`),
+    INDEX `company_invitations_company_id_status_idx`(`company_id`, `status`),
+    INDEX `company_invitations_email_status_idx`(`email`, `status`),
+    INDEX `company_invitations_invited_by_user_id_idx`(`invited_by_user_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `reports` (
+    `id` VARCHAR(36) NOT NULL,
+    `reporter_user_id` VARCHAR(36) NOT NULL,
+    `target_type` ENUM('LISTING', 'COMPANY', 'USER', 'MESSAGE') NOT NULL,
+    `listing_id` VARCHAR(36) NULL,
+    `company_id` VARCHAR(36) NULL,
+    `reported_user_id` VARCHAR(36) NULL,
+    `message_id` VARCHAR(36) NULL,
+    `reason` ENUM('COUNTERFEIT', 'PRODUCT_QUALITY', 'MISLEADING', 'CONTACT_ABUSE', 'SPAM', 'ILLEGAL', 'HAZARDOUS', 'UNDOCUMENTED', 'OTHER') NOT NULL,
+    `details` TEXT NULL,
+    `status` ENUM('OPEN', 'IN_REVIEW', 'RESOLVED', 'DISMISSED') NOT NULL DEFAULT 'OPEN',
+    `resolution_notes` TEXT NULL,
+    `reviewed_by_user_id` VARCHAR(36) NULL,
+    `reviewed_at` DATETIME(3) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    INDEX `reports_status_created_at_idx`(`status`, `created_at`),
+    INDEX `reports_reporter_user_id_created_at_idx`(`reporter_user_id`, `created_at`),
+    INDEX `reports_target_type_status_idx`(`target_type`, `status`),
+    INDEX `reports_listing_id_idx`(`listing_id`),
+    INDEX `reports_company_id_idx`(`company_id`),
+    INDEX `reports_reported_user_id_idx`(`reported_user_id`),
+    INDEX `reports_message_id_idx`(`message_id`),
+    INDEX `reports_reviewed_by_user_id_idx`(`reviewed_by_user_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `listing_status_history` (
+    `id` VARCHAR(36) NOT NULL,
+    `listing_id` VARCHAR(36) NOT NULL,
+    `from_status` ENUM('DRAFT', 'PENDING_REVIEW', 'PUBLISHED', 'PAUSED', 'NEGOTIATING', 'CLOSED', 'EXPIRED', 'REJECTED', 'ARCHIVED') NULL,
+    `to_status` ENUM('DRAFT', 'PENDING_REVIEW', 'PUBLISHED', 'PAUSED', 'NEGOTIATING', 'CLOSED', 'EXPIRED', 'REJECTED', 'ARCHIVED') NOT NULL,
+    `actor_user_id` VARCHAR(36) NULL,
+    `reason` VARCHAR(160) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `listing_status_history_listing_id_created_at_idx`(`listing_id`, `created_at`),
+    INDEX `listing_status_history_actor_user_id_idx`(`actor_user_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `deal_status_history` (
+    `id` VARCHAR(36) NOT NULL,
+    `deal_id` VARCHAR(36) NOT NULL,
+    `from_status` ENUM('OPEN', 'AWAITING_DOCUMENTS', 'AWAITING_PAYMENT', 'AWAITING_PICKUP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED', 'DISPUTED', 'CANCELLED') NULL,
+    `to_status` ENUM('OPEN', 'AWAITING_DOCUMENTS', 'AWAITING_PAYMENT', 'AWAITING_PICKUP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED', 'DISPUTED', 'CANCELLED') NOT NULL,
+    `actor_user_id` VARCHAR(36) NULL,
+    `note` VARCHAR(200) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `deal_status_history_deal_id_created_at_idx`(`deal_id`, `created_at`),
+    INDEX `deal_status_history_actor_user_id_idx`(`actor_user_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `saved_searches` (
+    `id` VARCHAR(36) NOT NULL,
+    `user_id` VARCHAR(36) NOT NULL,
+    `name` VARCHAR(120) NOT NULL,
+    `filters` JSON NOT NULL,
+    `frequency` ENUM('NONE', 'DAILY', 'WEEKLY') NOT NULL DEFAULT 'DAILY',
+    `is_active` BOOLEAN NOT NULL DEFAULT true,
+    `last_processed_at` DATETIME(3) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    INDEX `saved_searches_user_id_is_active_idx`(`user_id`, `is_active`),
+    INDEX `saved_searches_is_active_frequency_idx`(`is_active`, `frequency`),
+    PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
@@ -126,6 +280,8 @@ CREATE TABLE `listings` (
     `requires_documents` BOOLEAN NOT NULL DEFAULT false,
     `city` VARCHAR(120) NULL,
     `state` CHAR(2) NULL,
+    `latitude` DECIMAL(10, 7) NULL,
+    `longitude` DECIMAL(10, 7) NULL,
     `published_at` DATETIME(3) NULL,
     `expires_at` DATETIME(3) NULL,
     `view_count` INTEGER NOT NULL DEFAULT 0,
@@ -140,6 +296,7 @@ CREATE TABLE `listings` (
     INDEX `listings_category_id_status_idx`(`category_id`, `status`),
     INDEX `listings_company_id_status_idx`(`company_id`, `status`),
     INDEX `listings_city_state_status_idx`(`city`, `state`, `status`),
+    INDEX `listings_latitude_longitude_idx`(`latitude`, `longitude`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -162,6 +319,29 @@ CREATE TABLE `listing_media` (
     INDEX `listing_media_listing_id_status_sort_order_idx`(`listing_id`, `status`, `sort_order`),
     INDEX `listing_media_uploaded_by_user_id_idx`(`uploaded_by_user_id`),
     UNIQUE INDEX `listing_media_listing_id_sort_order_key`(`listing_id`, `sort_order`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `listing_documents` (
+    `id` VARCHAR(36) NOT NULL,
+    `listing_id` VARCHAR(36) NOT NULL,
+    `uploaded_by_user_id` VARCHAR(36) NOT NULL,
+    `type` ENUM('TECHNICAL_REPORT', 'LAB_ANALYSIS', 'SAFETY_DATA_SHEET', 'OTHER') NOT NULL DEFAULT 'TECHNICAL_REPORT',
+    `file_name` VARCHAR(255) NOT NULL,
+    `storage_key` VARCHAR(255) NOT NULL,
+    `mime_type` VARCHAR(80) NOT NULL,
+    `size_bytes` INTEGER NOT NULL,
+    `sha256` CHAR(64) NOT NULL,
+    `valid_until` DATE NULL,
+    `status` ENUM('READY', 'REJECTED') NOT NULL DEFAULT 'READY',
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+    `deleted_at` DATETIME(3) NULL,
+
+    UNIQUE INDEX `listing_documents_storage_key_key`(`storage_key`),
+    INDEX `listing_documents_listing_id_deleted_at_status_idx`(`listing_id`, `deleted_at`, `status`),
+    INDEX `listing_documents_uploaded_by_user_id_idx`(`uploaded_by_user_id`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -397,7 +577,7 @@ CREATE TABLE `messages` (
 CREATE TABLE `notifications` (
     `id` VARCHAR(36) NOT NULL,
     `user_id` VARCHAR(36) NOT NULL,
-    `type` ENUM('PROPOSAL_CREATED', 'PROPOSAL_COUNTERED', 'PROPOSAL_ACCEPTED', 'PROPOSAL_REJECTED', 'PROPOSAL_CANCELLED', 'MESSAGE_RECEIVED', 'SYSTEM') NOT NULL,
+    `type` ENUM('PROPOSAL_CREATED', 'PROPOSAL_COUNTERED', 'PROPOSAL_ACCEPTED', 'PROPOSAL_REJECTED', 'PROPOSAL_CANCELLED', 'MESSAGE_RECEIVED', 'COMPANY_VERIFICATION_REQUESTED', 'COMPANY_VERIFIED', 'COMPANY_VERIFICATION_REJECTED', 'SAVED_SEARCH_MATCH', 'SYSTEM') NOT NULL,
     `title` VARCHAR(160) NOT NULL,
     `body` TEXT NOT NULL,
     `payload` JSON NULL,
@@ -423,6 +603,110 @@ CREATE TABLE `auth_tokens` (
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- CreateTable
+CREATE TABLE `plans` (
+    `id` VARCHAR(36) NOT NULL,
+    `code` VARCHAR(60) NOT NULL,
+    `name` VARCHAR(120) NOT NULL,
+    `description` TEXT NULL,
+    `price_monthly` DECIMAL(14, 2) NOT NULL,
+    `currency` CHAR(3) NOT NULL DEFAULT 'BRL',
+    `features` JSON NULL,
+    `is_active` BOOLEAN NOT NULL DEFAULT true,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `plans_code_key`(`code`),
+    INDEX `plans_is_active_idx`(`is_active`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `subscriptions` (
+    `id` VARCHAR(36) NOT NULL,
+    `company_id` VARCHAR(36) NOT NULL,
+    `plan_id` VARCHAR(36) NOT NULL,
+    `provider` VARCHAR(40) NOT NULL DEFAULT 'INTERNAL',
+    `external_id` VARCHAR(180) NULL,
+    `status` ENUM('PENDING', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED') NOT NULL DEFAULT 'PENDING',
+    `current_period_start` DATETIME(3) NULL,
+    `current_period_end` DATETIME(3) NULL,
+    `cancel_at` DATETIME(3) NULL,
+    `cancelled_at` DATETIME(3) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    INDEX `subscriptions_company_id_status_idx`(`company_id`, `status`),
+    INDEX `subscriptions_plan_id_status_idx`(`plan_id`, `status`),
+    INDEX `subscriptions_status_current_period_end_idx`(`status`, `current_period_end`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `reviews` (
+    `id` VARCHAR(36) NOT NULL,
+    `deal_id` VARCHAR(36) NOT NULL,
+    `author_user_id` VARCHAR(36) NOT NULL,
+    `author_company_id` VARCHAR(36) NOT NULL,
+    `reviewed_company_id` VARCHAR(36) NOT NULL,
+    `rating` INTEGER NOT NULL,
+    `comment` TEXT NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    INDEX `reviews_reviewed_company_id_created_at_idx`(`reviewed_company_id`, `created_at` DESC),
+    INDEX `reviews_author_user_id_idx`(`author_user_id`),
+    INDEX `reviews_author_company_id_idx`(`author_company_id`),
+    UNIQUE INDEX `reviews_deal_id_author_company_id_key`(`deal_id`, `author_company_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `contact_unlocks` (
+    `id` VARCHAR(36) NOT NULL,
+    `company_id` VARCHAR(36) NOT NULL,
+    `listing_id` VARCHAR(36) NOT NULL,
+    `user_id` VARCHAR(36) NOT NULL,
+    `source` ENUM('PLAN', 'CREDIT', 'ONE_TIME') NOT NULL DEFAULT 'ONE_TIME',
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `contact_unlocks_listing_id_idx`(`listing_id`),
+    INDEX `contact_unlocks_user_id_created_at_idx`(`user_id`, `created_at`),
+    UNIQUE INDEX `contact_unlocks_company_id_listing_id_key`(`company_id`, `listing_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `platform_settings` (
+    `key` VARCHAR(80) NOT NULL,
+    `value` JSON NOT NULL,
+    `updated_by_user_id` VARCHAR(36) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`key`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `outbox_events` (
+    `id` VARCHAR(36) NOT NULL,
+    `type` VARCHAR(80) NOT NULL,
+    `aggregate_type` VARCHAR(60) NULL,
+    `aggregate_id` VARCHAR(36) NULL,
+    `payload` JSON NOT NULL,
+    `status` ENUM('PENDING', 'PROCESSING', 'DISPATCHED', 'PROCESSED', 'FAILED') NOT NULL DEFAULT 'PENDING',
+    `attempts` INTEGER NOT NULL DEFAULT 0,
+    `available_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `processed_at` DATETIME(3) NULL,
+    `last_error` TEXT NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    INDEX `outbox_events_status_available_at_idx`(`status`, `available_at`),
+    INDEX `outbox_events_aggregate_type_aggregate_id_idx`(`aggregate_type`, `aggregate_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- AddForeignKey
 ALTER TABLE `sessions` ADD CONSTRAINT `sessions_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -431,6 +715,63 @@ ALTER TABLE `company_members` ADD CONSTRAINT `company_members_company_id_fkey` F
 
 -- AddForeignKey
 ALTER TABLE `company_members` ADD CONSTRAINT `company_members_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `company_documents` ADD CONSTRAINT `company_documents_company_id_fkey` FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `company_documents` ADD CONSTRAINT `company_documents_uploaded_by_user_id_fkey` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `company_documents` ADD CONSTRAINT `company_documents_reviewed_by_user_id_fkey` FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `company_verifications` ADD CONSTRAINT `company_verifications_company_id_fkey` FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `company_verifications` ADD CONSTRAINT `company_verifications_requested_by_user_id_fkey` FOREIGN KEY (`requested_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `company_verifications` ADD CONSTRAINT `company_verifications_reviewed_by_user_id_fkey` FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `company_invitations` ADD CONSTRAINT `company_invitations_company_id_fkey` FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `company_invitations` ADD CONSTRAINT `company_invitations_invited_by_user_id_fkey` FOREIGN KEY (`invited_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reports` ADD CONSTRAINT `reports_reporter_user_id_fkey` FOREIGN KEY (`reporter_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reports` ADD CONSTRAINT `reports_reviewed_by_user_id_fkey` FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reports` ADD CONSTRAINT `reports_listing_id_fkey` FOREIGN KEY (`listing_id`) REFERENCES `listings`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reports` ADD CONSTRAINT `reports_company_id_fkey` FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reports` ADD CONSTRAINT `reports_reported_user_id_fkey` FOREIGN KEY (`reported_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reports` ADD CONSTRAINT `reports_message_id_fkey` FOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `listing_status_history` ADD CONSTRAINT `listing_status_history_listing_id_fkey` FOREIGN KEY (`listing_id`) REFERENCES `listings`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `listing_status_history` ADD CONSTRAINT `listing_status_history_actor_user_id_fkey` FOREIGN KEY (`actor_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `deal_status_history` ADD CONSTRAINT `deal_status_history_deal_id_fkey` FOREIGN KEY (`deal_id`) REFERENCES `deals`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `deal_status_history` ADD CONSTRAINT `deal_status_history_actor_user_id_fkey` FOREIGN KEY (`actor_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `saved_searches` ADD CONSTRAINT `saved_searches_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `waste_categories` ADD CONSTRAINT `waste_categories_parent_id_fkey` FOREIGN KEY (`parent_id`) REFERENCES `waste_categories`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -455,6 +796,12 @@ ALTER TABLE `listing_media` ADD CONSTRAINT `listing_media_listing_id_fkey` FOREI
 
 -- AddForeignKey
 ALTER TABLE `listing_media` ADD CONSTRAINT `listing_media_uploaded_by_user_id_fkey` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `listing_documents` ADD CONSTRAINT `listing_documents_listing_id_fkey` FOREIGN KEY (`listing_id`) REFERENCES `listings`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `listing_documents` ADD CONSTRAINT `listing_documents_uploaded_by_user_id_fkey` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `home_carousel_slides` ADD CONSTRAINT `home_carousel_slides_updated_by_user_id_fkey` FOREIGN KEY (`updated_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -548,3 +895,34 @@ ALTER TABLE `notifications` ADD CONSTRAINT `notifications_user_id_fkey` FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE `auth_tokens` ADD CONSTRAINT `auth_tokens_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `subscriptions` ADD CONSTRAINT `subscriptions_company_id_fkey` FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `subscriptions` ADD CONSTRAINT `subscriptions_plan_id_fkey` FOREIGN KEY (`plan_id`) REFERENCES `plans`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reviews` ADD CONSTRAINT `reviews_deal_id_fkey` FOREIGN KEY (`deal_id`) REFERENCES `deals`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reviews` ADD CONSTRAINT `reviews_author_user_id_fkey` FOREIGN KEY (`author_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reviews` ADD CONSTRAINT `reviews_author_company_id_fkey` FOREIGN KEY (`author_company_id`) REFERENCES `companies`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reviews` ADD CONSTRAINT `reviews_reviewed_company_id_fkey` FOREIGN KEY (`reviewed_company_id`) REFERENCES `companies`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `contact_unlocks` ADD CONSTRAINT `contact_unlocks_company_id_fkey` FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `contact_unlocks` ADD CONSTRAINT `contact_unlocks_listing_id_fkey` FOREIGN KEY (`listing_id`) REFERENCES `listings`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `contact_unlocks` ADD CONSTRAINT `contact_unlocks_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `platform_settings` ADD CONSTRAINT `platform_settings_updated_by_user_id_fkey` FOREIGN KEY (`updated_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+

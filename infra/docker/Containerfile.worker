@@ -6,6 +6,8 @@ RUN corepack enable && corepack prepare pnpm@9.15.5 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json turbo.json ./
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/database/package.json packages/database/package.json
+# O postinstall do pacote de banco roda `prisma generate` e precisa do schema.
+COPY packages/database/prisma packages/database/prisma
 RUN pnpm install --frozen-lockfile
 
 COPY apps/worker apps/worker

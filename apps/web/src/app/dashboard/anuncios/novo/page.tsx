@@ -6,6 +6,13 @@ import { useRouter } from 'next/navigation';
 import { api, Category, Company, Material } from '../../../../lib/api';
 import { SessionActions } from '../../../../components/session-actions';
 import { CurrencyInput } from '../../../../components/currency-input';
+import {
+  ListingDocumentPicker,
+  MAX_LISTING_DOCUMENTS,
+  PendingListingDocument,
+} from '../../../../components/listing-documents';
+import { listingDocumentTypeLabels } from '../../../../lib/labels';
+import { formatDateOnly } from '../../../../lib/format';
 
 export default function NewListingPage() {
   const router = useRouter();
@@ -31,6 +38,7 @@ export default function NewListingPage() {
   const [ownTransport, setOwnTransport] = useState(false);
   const [requiresDocuments, setRequiresDocuments] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [documents, setDocuments] = useState<PendingListingDocument[]>([]);
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [error, setError] = useState('');
@@ -84,12 +92,14 @@ export default function NewListingPage() {
       });
       listingCreated = true;
       if (photos.length) await api.uploadListingPhotos(listing.id, photos);
+      for (const document of documents)
+        await api.uploadListingDocument(listing.id, document);
       await api.submitListing(listing.id);
       router.push('/dashboard/anuncios?created=review');
     } catch {
       setError(
         listingCreated
-          ? 'O anúncio foi salvo como rascunho, mas as fotos ou o envio para análise falharam. Abra o anúncio no painel para continuar.'
+          ? 'O anúncio foi salvo como rascunho, mas as fotos, os laudos ou o envio para análise falharam. Abra o anúncio no painel para continuar.'
           : 'Não foi possível criar o anúncio. Confira os dados e tente novamente.',
       );
     } finally {
@@ -268,6 +278,54 @@ export default function NewListingPage() {
               ))}
             </div>
           )}
+          <fieldset className="listing-document-fieldset">
+            <legend>Laudos e documentos técnicos</legend>
+            <p className="form-note">
+              {type === 'BUY'
+                ? 'Anexe especificações ou laudos de referência que o material comprado deve atender.'
+                : 'Anexe laudos de caracterização, análises laboratoriais ou FDS do material vendido.'}{' '}
+              Os laudos ficam disponíveis apenas para usuários autenticados.
+            </p>
+            {documents.length > 0 && (
+              <ul className="listing-document-list">
+                {documents.map((document, index) => (
+                  <li key={`${document.file.name}-${index}`}>
+                    <div>
+                      <strong>
+                        {listingDocumentTypeLabels[document.type]}
+                      </strong>
+                      <span>
+                        {document.file.name}
+                        {document.validUntil
+                          ? ` · válido até ${formatDateOnly(document.validUntil)}`
+                          : ''}
+                      </span>
+                    </div>
+                    <button
+                      className="secondary-button small"
+                      type="button"
+                      onClick={() =>
+                        setDocuments((current) =>
+                          current.filter((_, position) => position !== index),
+                        )
+                      }
+                    >
+                      Remover
+                      <span className="sr-only"> {document.file.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <ListingDocumentPicker
+              disabled={saving}
+              remaining={MAX_LISTING_DOCUMENTS - documents.length}
+              submitLabel="Adicionar laudo"
+              onAdd={(document) =>
+                setDocuments((current) => [...current, document])
+              }
+            />
+          </fieldset>
           <label>
             Título do anúncio *
             <input

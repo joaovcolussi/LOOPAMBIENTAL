@@ -5,6 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/prisma.service';
+import {
+  activeDocumentsWhere,
+  listingDocumentSelect,
+} from '../listings/listings.service';
 
 @Injectable()
 export class ModerationService {
@@ -37,6 +41,11 @@ export class ModerationService {
               where: { status: 'READY' },
               orderBy: { sortOrder: 'asc' },
               select: { id: true, altText: true, sortOrder: true },
+            },
+            documents: {
+              where: activeDocumentsWhere,
+              orderBy: { createdAt: 'asc' },
+              select: listingDocumentSelect,
             },
           },
         },

@@ -157,7 +157,19 @@ export type ListingDetail = {
   };
   createdBy: { id: string; name: string };
   media: ListingMedia[];
+  documents: ListingDocument[];
   statusHistory: ListingStatusHistoryEntry[];
+};
+export type ListingDocumentType =
+  'TECHNICAL_REPORT' | 'LAB_ANALYSIS' | 'SAFETY_DATA_SHEET' | 'OTHER';
+export type ListingDocument = {
+  id: string;
+  type: ListingDocumentType;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  validUntil: string | null;
+  createdAt: string;
 };
 export type ListingMedia = {
   id: string;
@@ -235,6 +247,7 @@ export type ModerationCase = {
     company: { legalName: string; tradeName: string | null };
     category: { name: string };
     media: ListingMedia[];
+    documents: ListingDocument[];
   };
 };
 export type Favorite = {
@@ -293,6 +306,14 @@ export type Proposal = {
 
 export function listingMediaUrl(id: string, owner = false) {
   return `${API_URL}/listings/media/${id}${owner ? '/owner' : ''}`;
+}
+
+export function listingDocumentUrl(id: string, owner = false) {
+  return `${API_URL}/listings/documents/${id}${owner ? '/owner' : ''}`;
+}
+
+export function moderationDocumentUrl(id: string) {
+  return `${API_URL}/admin/moderation/cases/documents/${id}`;
 }
 
 export function moderationMediaUrl(id: string) {
@@ -1034,6 +1055,23 @@ export const api = {
       body,
     });
   },
+  uploadListingDocument: (
+    id: string,
+    input: { file: File; type: ListingDocumentType; validUntil?: string },
+  ) => {
+    const body = new FormData();
+    body.append('type', input.type);
+    if (input.validUntil) body.append('validUntil', input.validUntil);
+    body.append('document', input.file);
+    return request<{ document: ListingDocument }>(`/listings/${id}/documents`, {
+      method: 'POST',
+      body,
+    });
+  },
+  removeListingDocument: (id: string, documentId: string) =>
+    request<void>(`/listings/${id}/documents/${documentId}`, {
+      method: 'DELETE',
+    }),
   submitListing: (id: string) =>
     request<{ listing: unknown }>(`/listings/${id}/submit`, {
       method: 'POST',

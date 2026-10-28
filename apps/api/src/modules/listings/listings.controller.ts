@@ -5,14 +5,16 @@ import {
   Param,
   Query,
   Req,
+  Res,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { AuthService } from '../auth/auth.service';
 import { readSessionToken } from '../auth/session';
 import { ListingsService } from './listings.service';
+import { privateDownload } from '../../common/content-disposition';
 import {
   ListingSearchService,
   normalizeListingSearchFilters,
@@ -89,6 +91,34 @@ export class ListingsController {
       id,
     );
     return new StreamableFile(media.buffer, { type: media.mimeType });
+  }
+
+  // Reports can carry commercially sensitive data, so downloads require an
+  // authenticated account (no anonymous scraping).
+  @Get('documents/:id')
+  @UseGuards(AuthGuard)
+  async document(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return privateDownload(
+      response,
+      await this.listingsService.readPublishedDocument(request.user.id, id),
+    );
+  }
+
+  @Get('documents/:id/owner')
+  @UseGuards(AuthGuard)
+  async ownedDocument(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return privateDownload(
+      response,
+      await this.listingsService.readOwnedDocument(request.user.id, id),
+    );
   }
 
   @Get()

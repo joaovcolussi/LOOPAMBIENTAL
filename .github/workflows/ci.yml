@@ -46,6 +46,19 @@ jobs:
       - name: Build
         run: pnpm build
 
+  images:
+    name: Container images
+    runs-on: ubuntu-latest
+    needs: quality
+    strategy:
+      matrix:
+        app: [api, worker, web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.app }} image
+        run: docker build -f infra/docker/Containerfile.${{ matrix.app }} -t loopambiental-${{ matrix.app }}:ci .
+
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
@@ -58,6 +71,11 @@ jobs:
       WEB_PUBLIC_URL: http://127.0.0.1:3000
       ADMIN_EMAILS: admin@loopambiental.com
       FIELD_ENCRYPTION_KEY: ci-field-encryption-key
+      AUTH_THROTTLE_LIMIT: 1000
+      STORAGE_ENDPOINT: http://127.0.0.1:9000
+      STORAGE_BUCKET: loopambiental-listings
+      STORAGE_ACCESS_KEY: loopambiental
+      STORAGE_SECRET_KEY: loopambiental_local
       E2E_BASE_URL: http://127.0.0.1:3000
       E2E_API_URL: http://127.0.0.1:3001/api/v1
       E2E_WEB_ORIGIN: http://127.0.0.1:3000
@@ -103,8 +121,33 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @loopambiental/database generate
 
+      # Scripts load ../../.env via --env-file; values exported by this job
+      # take precedence over the file, which only fills the remaining defaults.
+      - name: Create .env from example
+        run: cp .env.example .env
+
       - name: Apply migrations
         run: pnpm --filter @loopambiental/database db:deploy
+
+      # MinIO needs a "server" command, which service containers cannot set.
+      # minio/minio was removed from Docker Hub; try the official mirrors.
+      - name: Start MinIO
+        run: |
+          for image in quay.io/minio/minio:latest cgr.dev/chainguard/minio:latest; do
+            if docker pull "$image"; then MINIO_IMAGE="$image"; break; fi
+          done
+          test -n "$MINIO_IMAGE"
+          echo "Using $MINIO_IMAGE"
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=loopambiental \
+            -e MINIO_ROOT_PASSWORD=loopambiental_local \
+            "$MINIO_IMAGE" server /data
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker logs minio
+          exit 1
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
@@ -125,6 +168,14 @@ jobs:
             if curl -fsS http://127.0.0.1:3000 >/dev/null; then break; fi
             sleep 2
           done
+
+      - name: Seed admin account and plans
+        run: |
+          curl -fsS -X POST http://127.0.0.1:3001/api/v1/auth/register \
+            -H 'Content-Type: application/json' \
+            -H 'Origin: http://127.0.0.1:3000' -H 'X-App-Action: 1' \
+            -d '{"name":"Admin E2E","email":"admin@loopambiental.com","password":"loopambiental"}' >/dev/null
+          mysql -h 127.0.0.1 -P 3306 -u loopambiental -ploopambiental_local loopambiental < e2e/support/seed.sql
 
       - name: Run Playwright tests
         run: pnpm test:e2e

@@ -107,7 +107,11 @@ describe('ProposalsService transitions', () => {
       },
       deal: { findUnique: jest.fn().mockResolvedValue(null) },
     };
-    const service = new ProposalsService(prisma as never, {} as never, {} as never);
+    const service = new ProposalsService(
+      prisma as never,
+      {} as never,
+      {} as never,
+    );
 
     await expect(
       service.accept('seller-user-id', 'proposal-id'),
@@ -141,7 +145,11 @@ describe('ProposalsService transitions', () => {
       },
       deal: { findUnique: jest.fn().mockResolvedValue(existingDeal) },
     };
-    const service = new ProposalsService(prisma as never, {} as never, {} as never);
+    const service = new ProposalsService(
+      prisma as never,
+      {} as never,
+      {} as never,
+    );
 
     await expect(
       service.accept('buyer-user-id', 'proposal-id'),

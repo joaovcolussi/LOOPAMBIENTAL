@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { Check, X } from 'lucide-react';
-import { api, ModerationCase, moderationMediaUrl } from '../../../lib/api';
+import {
+  api,
+  ModerationCase,
+  moderationDocumentUrl,
+  moderationMediaUrl,
+} from '../../../lib/api';
+import { ListingDocumentList } from '../../../components/listing-documents';
 import { AdminNav } from '../../../components/admin-nav';
 import { ConfirmDialog } from '../../../components/confirm-dialog';
 import { formatMoney, formatQuantity } from '../../../lib/format';
@@ -112,6 +118,12 @@ export default function ModerationPage() {
                   <p>
                     {item.listing.description || 'Sem descrição adicional.'}
                   </p>
+                  {item.listing.documents.length > 0 && (
+                    <ListingDocumentList
+                      documents={item.listing.documents}
+                      hrefFor={moderationDocumentUrl}
+                    />
+                  )}
                   <div className="moderation-facts">
                     <span>
                       {formatQuantity(item.listing.quantity)}{' '}

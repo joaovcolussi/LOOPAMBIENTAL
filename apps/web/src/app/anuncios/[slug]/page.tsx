@@ -16,7 +16,8 @@ import { FavoriteButton } from '../../../components/favorite-button';
 import { CurrencyInput } from '../../../components/currency-input';
 import { ReportButton } from '../../../components/report-button';
 import { formatMoney, formatQuantity } from '../../../lib/format';
-import { listingMediaUrl } from '../../../lib/api';
+import { listingDocumentUrl, listingMediaUrl } from '../../../lib/api';
+import { ListingDocumentList } from '../../../components/listing-documents';
 
 const frequencyLabels: Record<string, string> = {
   ONE_TIME: 'Operação única',
@@ -53,6 +54,7 @@ export default function ListingDetailPage() {
   const [companyError, setCompanyError] = useState('');
   const [unlocking, setUnlocking] = useState(false);
   const [contactError, setContactError] = useState('');
+  const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
     if (!params.slug) return;
@@ -63,6 +65,7 @@ export default function ListingDetailPage() {
     api
       .companies()
       .then(({ companies: result }) => {
+        setSignedIn(true);
         setCompanies(result);
         setCompanyId(result[0]?.id ?? '');
       })
@@ -276,6 +279,36 @@ export default function ListingDetailPage() {
                 </strong>
               </div>
             </div>
+            {listing.documents.length > 0 && (
+              <section
+                className="listing-document-section"
+                aria-labelledby="listing-documents-title"
+              >
+                <h2 id="listing-documents-title">
+                  Laudos e documentos técnicos
+                </h2>
+                {signedIn ? (
+                  <ListingDocumentList
+                    documents={listing.documents}
+                    hrefFor={(id) => listingDocumentUrl(id)}
+                  />
+                ) : (
+                  <p className="form-note">
+                    {listing.documents.length}{' '}
+                    {listing.documents.length === 1
+                      ? 'documento disponível'
+                      : 'documentos disponíveis'}{' '}
+                    para usuários cadastrados.{' '}
+                    <a
+                      className="text-link"
+                      href={`/entrar?next=/anuncios/${listing.slug}`}
+                    >
+                      Entre para baixar
+                    </a>
+                  </p>
+                )}
+              </section>
+            )}
             <div className="detail-location">
               <MapPin size={18} />
               <span>
