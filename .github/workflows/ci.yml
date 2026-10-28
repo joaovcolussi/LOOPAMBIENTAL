@@ -58,6 +58,11 @@ jobs:
       WEB_PUBLIC_URL: http://127.0.0.1:3000
       ADMIN_EMAILS: admin@loopambiental.com
       FIELD_ENCRYPTION_KEY: ci-field-encryption-key
+      AUTH_THROTTLE_LIMIT: 1000
+      STORAGE_ENDPOINT: http://127.0.0.1:9000
+      STORAGE_BUCKET: loopambiental-listings
+      STORAGE_ACCESS_KEY: loopambiental
+      STORAGE_SECRET_KEY: loopambiental_local
       E2E_BASE_URL: http://127.0.0.1:3000
       E2E_API_URL: http://127.0.0.1:3001/api/v1
       E2E_WEB_ORIGIN: http://127.0.0.1:3000
@@ -111,6 +116,18 @@ jobs:
       - name: Apply migrations
         run: pnpm --filter @loopambiental/database db:deploy
 
+      # MinIO needs a "server" command, which service containers cannot set.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=loopambiental \
+            -e MINIO_ROOT_PASSWORD=loopambiental_local \
+            minio/minio:latest server /data
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then break; fi
+            sleep 1
+          done
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
@@ -130,6 +147,14 @@ jobs:
             if curl -fsS http://127.0.0.1:3000 >/dev/null; then break; fi
             sleep 2
           done
+
+      - name: Seed admin account and plans
+        run: |
+          curl -fsS -X POST http://127.0.0.1:3001/api/v1/auth/register \
+            -H 'Content-Type: application/json' \
+            -H 'Origin: http://127.0.0.1:3000' -H 'X-App-Action: 1' \
+            -d '{"name":"Admin E2E","email":"admin@loopambiental.com","password":"loopambiental"}' >/dev/null
+          mysql -h 127.0.0.1 -P 3306 -u loopambiental -ploopambiental_local loopambiental < e2e/support/seed.sql
 
       - name: Run Playwright tests
         run: pnpm test:e2e
