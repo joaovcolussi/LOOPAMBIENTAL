@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import {
@@ -12,6 +13,8 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { createHash, randomUUID } from 'node:crypto';
+import { createAntivirusProvider } from './file-scanner';
+import { FileRegistryService, UploadContext } from './file-registry.service';
 const sharp = require('sharp') as typeof import('sharp').default;
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -24,8 +27,9 @@ export class ListingMediaStorageService {
   private readonly client: S3Client;
   private readonly production = process.env.NODE_ENV === 'production';
   private bucketReady: Promise<void> | null = null;
+  private readonly scanner = createAntivirusProvider();
 
-  constructor() {
+  constructor(@Optional() private readonly registry?: FileRegistryService) {
     const endpoint = process.env.STORAGE_ENDPOINT ?? 'http://localhost:9000';
     const accessKeyId = process.env.STORAGE_ACCESS_KEY ?? 'loopambiental';
     const secretAccessKey =
@@ -47,20 +51,50 @@ export class ListingMediaStorageService {
     });
   }
 
-  async upload(file: Express.Multer.File) {
-    return this.uploadImage(file, 'listings', false);
+  async upload(file: Express.Multer.File, context?: UploadContext) {
+    return this.uploadImage(file, 'listings', false, context);
   }
 
-  async uploadCarousel(file: Express.Multer.File) {
-    return this.uploadImage(file, 'home-carousel', true);
+  async uploadCarousel(file: Express.Multer.File, context?: UploadContext) {
+    return this.uploadImage(file, 'home-carousel', true, context);
+  }
+
+  /**
+   * Scans the original bytes before anything is stored. Rejected uploads are
+   * still recorded in the file registry for the security team.
+   */
+  private async scan(
+    buffer: Buffer,
+    context: UploadContext | undefined,
+    accessLevel: 'PUBLIC' | 'PRIVATE',
+  ) {
+    const verdict = await this.scanner.scan(buffer);
+    if (!verdict.clean) {
+      if (context)
+        await this.registry?.record(
+          context,
+          {
+            storageKey: `rejected/${randomUUID()}`,
+            mimeType: 'application/octet-stream',
+            sizeBytes: buffer.length,
+            sha256: createHash('sha256').update(buffer).digest('hex'),
+            accessLevel,
+          },
+          verdict,
+        );
+      throw new BadRequestException('UPLOAD_REJECTED_BY_SCANNER');
+    }
+    return verdict;
   }
 
   async uploadDocument(
     file: Express.Multer.File,
     prefix: DocumentPrefix = 'company-documents',
+    context?: UploadContext,
   ) {
     if (!file.buffer?.length || file.size > MAX_DOCUMENT_SIZE)
       throw new BadRequestException('INVALID_DOCUMENT_SIZE');
+    const verdict = await this.scan(file.buffer, context, 'PRIVATE');
     const detected = await this.detectDocument(file.buffer);
     await this.ensureBucket();
     const storageKey = `${prefix}/${randomUUID()}.${detected.extension}`;
@@ -78,7 +112,7 @@ export class ListingMediaStorageService {
     } catch {
       throw new ServiceUnavailableException('STORAGE_UNAVAILABLE');
     }
-    return {
+    const stored = {
       fileName: this.withExtension(
         this.sanitizeFileName(file.originalname),
         detected.extension,
@@ -88,6 +122,13 @@ export class ListingMediaStorageService {
       sizeBytes: detected.buffer.length,
       sha256: createHash('sha256').update(detected.buffer).digest('hex'),
     };
+    if (context)
+      await this.registry?.record(
+        context,
+        { ...stored, accessLevel: 'PRIVATE' },
+        verdict,
+      );
+    return stored;
   }
 
   private async detectDocument(buffer: Buffer) {
@@ -151,9 +192,11 @@ export class ListingMediaStorageService {
     file: Express.Multer.File,
     prefix: 'listings' | 'home-carousel',
     carousel: boolean,
+    context?: UploadContext,
   ) {
     if (!file.buffer?.length || file.size > MAX_IMAGE_SIZE)
       throw new BadRequestException('INVALID_IMAGE_SIZE');
+    const verdict = await this.scan(file.buffer, context, 'PUBLIC');
     let sanitized: Buffer;
     try {
       const image = sharp(file.buffer, {
@@ -201,12 +244,19 @@ export class ListingMediaStorageService {
     } catch {
       throw new ServiceUnavailableException('STORAGE_UNAVAILABLE');
     }
-    return {
+    const stored = {
       storageKey,
       mimeType: 'image/webp',
       sizeBytes: sanitized.length,
       sha256: createHash('sha256').update(sanitized).digest('hex'),
     };
+    if (context)
+      await this.registry?.record(
+        context,
+        { ...stored, accessLevel: 'PUBLIC' },
+        verdict,
+      );
+    return stored;
   }
 
   async read(storageKey: string) {

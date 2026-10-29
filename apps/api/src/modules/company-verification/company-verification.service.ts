@@ -84,7 +84,15 @@ export class CompanyVerificationService {
     if (existing >= MAX_DOCUMENTS)
       throw new BadRequestException('DOCUMENT_LIMIT_EXCEEDED');
 
-    const upload = await this.storage.uploadDocument(file);
+    const upload = await this.storage.uploadDocument(
+      file,
+      'company-documents',
+      {
+        ownerUserId: userId,
+        purpose: 'COMPANY_DOCUMENT',
+        resourceId: companyId,
+      },
+    );
     try {
       return await this.prisma.companyDocument.create({
         data: {

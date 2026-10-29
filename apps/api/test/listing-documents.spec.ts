@@ -63,6 +63,7 @@ describe('ListingsService documents (laudos)', () => {
     expect(storage.uploadDocument).toHaveBeenCalledWith(
       pdf,
       'listing-documents',
+      expect.objectContaining({ purpose: 'LISTING_DOCUMENT' }),
     );
     expect(transaction.listingDocument.create).toHaveBeenCalledWith(
       expect.objectContaining({

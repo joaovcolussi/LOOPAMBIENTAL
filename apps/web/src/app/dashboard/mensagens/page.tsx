@@ -10,6 +10,7 @@ import {
   Message,
 } from '../../../lib/api';
 import { SessionActions } from '../../../components/session-actions';
+import { useRealtime } from '../../../hooks/use-realtime';
 
 export default function MessagesPage() {
   const router = useRouter();
@@ -20,6 +21,42 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const { connected } = useRealtime({
+    message: ({ conversationId, message }) => {
+      if (active?.id === conversationId) {
+        setMessages((current) =>
+          current.some((item) => item.id === message.id)
+            ? current
+            : [...current, message],
+        );
+        void api.markConversationRead(conversationId).catch(() => undefined);
+      }
+      setConversations((current) => {
+        const target = current.find((item) => item.id === conversationId);
+        if (!target) {
+          // A brand-new conversation: refresh the list once.
+          void api
+            .conversations()
+            .then(({ conversations: result }) => setConversations(result))
+            .catch(() => undefined);
+          return current;
+        }
+        const updated = {
+          ...target,
+          messages: [
+            {
+              body: message.body,
+              createdAt: message.createdAt,
+              senderUserId: message.senderUserId,
+            },
+          ],
+          unreadCount:
+            active?.id === conversationId ? 0 : target.unreadCount + 1,
+        };
+        return [updated, ...current.filter((item) => item.id !== target.id)];
+      });
+    },
+  });
   useEffect(() => {
     api
       .conversations()
@@ -56,7 +93,11 @@ export default function MessagesPage() {
     setError('');
     try {
       const result = await api.sendMessage(active.id, body);
-      setMessages((current) => [...current, result.message]);
+      setMessages((current) =>
+        current.some((item) => item.id === result.message.id)
+          ? current
+          : [...current, result.message],
+      );
       setBody('');
     } catch {
       setError('Não foi possível enviar a mensagem.');
@@ -87,7 +128,10 @@ export default function MessagesPage() {
         <p className="eyebrow">comunicação</p>
         <h1>Mensagens</h1>
         <p className="dashboard-lede">
-          Converse com empresas envolvidas nas suas propostas.
+          Converse com empresas envolvidas nas suas propostas.{' '}
+          <span className={`live-indicator ${connected ? 'online' : ''}`}>
+            {connected ? 'tempo real ativo' : 'reconectando...'}
+          </span>
         </p>
         {error && (
           <p className="form-error" role="alert">
@@ -140,7 +184,11 @@ export default function MessagesPage() {
                   <p className="message-empty">Envie a primeira mensagem.</p>
                 ) : (
                   messages.map((message) => (
-                    <div className="message-bubble" key={message.id}>
+                    <div
+                      className="message-bubble"
+                      key={message.id}
+                      aria-live="polite"
+                    >
                       <small>{message.sender.name}</small>
                       <p>{message.body}</p>
                     </div>

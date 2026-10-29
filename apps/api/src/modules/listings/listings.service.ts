@@ -334,7 +334,13 @@ export class ListingsService {
     }[] = [];
     try {
       for (const file of files)
-        uploads.push(await this.mediaStorage.upload(file));
+        uploads.push(
+          await this.mediaStorage.upload(file, {
+            ownerUserId: userId,
+            purpose: 'LISTING_MEDIA',
+            resourceId: id,
+          }),
+        );
 
       return await this.prisma.$transaction(async (transaction) => {
         const media = await Promise.all(
@@ -453,6 +459,7 @@ export class ListingsService {
     const upload = await this.mediaStorage.uploadDocument(
       file,
       'listing-documents',
+      { ownerUserId: userId, purpose: 'LISTING_DOCUMENT', resourceId: id },
     );
     try {
       return await this.prisma.$transaction(async (transaction) => {

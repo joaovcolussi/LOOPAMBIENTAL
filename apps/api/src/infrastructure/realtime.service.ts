@@ -33,6 +33,12 @@ export class RealtimeService {
     };
   }
 
+  connectionCount() {
+    return this.emitter
+      .eventNames()
+      .reduce((total, name) => total + this.emitter.listenerCount(name), 0);
+  }
+
   listenerCount(userId: string) {
     return this.emitter.listenerCount(this.channel(userId));
   }

@@ -719,6 +719,23 @@ export type CursorPagination = {
   hasMore: boolean;
   nextCursor: string | null;
 };
+export type ShipmentEvent = {
+  id: string;
+  status: string;
+  description: string;
+  location: string | null;
+  createdAt: string;
+};
+export type Shipment = {
+  id: string;
+  trackingCode: string;
+  carrierName: string;
+  status: string;
+  estimatedDeliveryAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+  events: ShipmentEvent[];
+};
 export type LogisticsRequest = {
   id: string;
   dealId: string;
@@ -729,6 +746,10 @@ export type LogisticsRequest = {
   pickupWindow: string | null;
   requirements: string | null;
   status: string;
+  createdAt: string;
+  deal?: { id: string; status: string; listing: { title: string } };
+  requestedBy?: { id: string; name: string };
+  shipment: Shipment | null;
   quotes: {
     id: string;
     carrierName: string;
@@ -1593,4 +1614,89 @@ export const api = {
         user: { id: string; name: string };
       }[];
     }>('/admin/data-requests'),
+  adminObservability: () =>
+    request<{
+      uptimeSeconds: number;
+      totalRequests: number;
+      totalErrors: number;
+      memory: { rssMb: number; heapUsedMb: number };
+      counters: Record<string, number>;
+      routes: {
+        method: string;
+        route: string;
+        count: number;
+        errors: number;
+        averageMs: number;
+        p95Ms: number;
+      }[];
+      realtimeConnections: number;
+      outbox: Record<string, number>;
+      failedEvents: {
+        id: string;
+        type: string;
+        attempts: number;
+        lastError: string | null;
+        updatedAt: string;
+      }[];
+      environment: string;
+      paymentProvider: string;
+    }>('/admin/observability'),
+  adminFiles: (status?: string) =>
+    request<{
+      files: {
+        id: string;
+        purpose: string;
+        resourceId: string | null;
+        mimeType: string;
+        sizeBytes: number;
+        sha256: string;
+        accessLevel: string;
+        scanStatus: string;
+        scanEngine: string | null;
+        scanDetails: string | null;
+        createdAt: string;
+        owner: { id: string; name: string };
+      }[];
+      summary: Record<string, number>;
+    }>(`/admin/files${status ? `?status=${status}` : ''}`),
+  simulateLogisticsQuotes: (requestId: string) =>
+    request<{ request: LogisticsRequest }>(
+      `/logistics/requests/${requestId}/simulate-quotes`,
+      { method: 'POST' },
+    ),
+  simulateShipmentEvent: (shipmentId: string) =>
+    request<{ shipment: Shipment }>(
+      `/logistics/shipments/${shipmentId}/simulate-next`,
+      { method: 'POST' },
+    ),
+  adminLogistics: (status?: string) =>
+    request<{ requests: LogisticsRequest[] }>(
+      `/admin/logistics${status ? `?status=${status}` : ''}`,
+    ),
+  adminAddLogisticsQuote: (
+    requestId: string,
+    input: {
+      carrierName: string;
+      amount: string;
+      estimatedDays?: number;
+      notes?: string;
+    },
+  ) =>
+    request<unknown>(`/logistics/requests/${requestId}/quotes`, {
+      method: 'POST',
+      headers: { 'X-Admin-Action': '1' },
+      body: JSON.stringify(input),
+    }),
+  adminShipmentEvent: (
+    shipmentId: string,
+    input: { status: string; description?: string; location?: string },
+  ) =>
+    request<{ shipment: Shipment }>(
+      `/admin/logistics/shipments/${shipmentId}/events`,
+      {
+        method: 'POST',
+        headers: { 'X-Admin-Action': '1' },
+        body: JSON.stringify(input),
+      },
+    ),
 };

@@ -68,6 +68,8 @@ export class PrismaExceptionFilter implements ExceptionFilter {
   }
 
   private resolveRequestId(request: Request) {
+    const assigned = (request as Request & { requestId?: string }).requestId;
+    if (assigned) return assigned;
     const header = request.headers['x-request-id'];
     if (typeof header === 'string' && header.trim()) return header.trim();
     return randomUUID();
