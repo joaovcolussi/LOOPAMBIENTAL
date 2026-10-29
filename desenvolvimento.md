@@ -37,6 +37,7 @@ Documento vivo de acompanhamento. Legenda:
 - [x] i18n com next-intl (pt-BR, en, es) — ⚠️ cobre home, banner e navegação; demais telas seguem em pt-BR
 
 ### Ressalvas conhecidas
+
 - ⚠️ Tempo real em memória (uma instância); várias instâncias exigem Redis pub/sub.
 - ⚠️ Varredura de uploads por assinaturas e síncrona; produção deve plugar antivírus real (ClamAV) no adapter, de preferência no worker.
 - ⚠️ Fatores de CO₂e ilustrativos, não certificados.
@@ -60,6 +61,7 @@ Documento vivo de acompanhamento. Legenda:
 - [x] UI/UX: rótulos centralizados (`lib/labels.ts`) e remoção de enums crus; estados de carregamento nas tabelas do admin; diálogo acessível de confirmação/motivo no lugar de `prompt`/`confirm`; correções de acessibilidade (label de mensagem, `aria-label` do campo de valor); fallback neutro de imagem por categoria; estados de erro/parcial no painel; formulário de anúncio sem empresa e com separador decimal pt-BR
 
 ### Próximo planejado
+
 - [ ] Verificação de e-mail obrigatória para login pós-cadastro
 - [ ] Cobrança real de assinaturas/desbloqueios: hoje a ativação interna do plano e o desbloqueio avulso não passam pelo adapter de pagamento
 - [ ] Scanner de uploads; `helmet` CSP fina; observabilidade (logs estruturados, métricas, traces)
@@ -87,6 +89,7 @@ Documento vivo de acompanhamento. Legenda:
 - [x] Login sem timing oracle; `error.tsx` e `not-found.tsx`; retry real na busca; erros tratados
 
 ### Planejado (rodada anterior — ver seção 1 para o status atual)
+
 - [x] Expiração absoluta de sessão (aplicada na rodada atual)
 - [x] Modais acessíveis no lugar de `prompt`/`confirm` (parcial — fluxos principais)
 - [ ] Verificação de e-mail obrigatória para login pós-cadastro
@@ -99,6 +102,7 @@ Documento vivo de acompanhamento. Legenda:
 ## 2. Concluído
 
 ### Plataforma e infraestrutura
+
 - ✅ Monorepo pnpm + Turborepo, TypeScript strict, Prettier
 - ✅ Docker Compose: MySQL 8.4, Redis, MinIO, Mailpit
 - ✅ Prisma + migrações versionadas (`db:migrate`, `db:deploy`, `db:status`)
@@ -106,6 +110,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Worker como processo separado (stub)
 
 ### Conta e acesso
+
 - ✅ Cadastro, login, logout e `GET /auth/me`
 - ✅ Sessão em cookie `HttpOnly`, `SameSite=Lax`, expiração deslizante
 - ✅ Hash de senha com scrypt e comparação em tempo constante
@@ -115,6 +120,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ RBAC de plataforma (USER/MODERATOR/ADMIN) e guards admin/moderação
 
 ### Empresas
+
 - ✅ Criação, listagem e edição de empresa
 - ✅ Membros com papéis OWNER/ADMIN/MEMBER
 - ✅ CNPJ criptografado + hash normalizado (unicidade)
@@ -126,22 +132,26 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Gestão de membros: papéis (proprietário/admin/membro), alteração e remoção
 
 ### Denúncias e moderação
+
 - ✅ Denúncias de anúncio, empresa, usuário e mensagem
 - ✅ Fila de denúncias no admin com resolver/arquivar e observações
 - ✅ Botão de denúncia na página do anúncio
 
 ### Rastreabilidade
+
 - ✅ Histórico imutável de status do anúncio (`listing_status_history`)
 - ✅ Histórico imutável de status da negociação (`deal_status_history`)
 - ✅ Timeline no detalhe do anúncio (proprietário) e da proposta
 
 ### Descoberta
+
 - ✅ Buscas salvas (`saved_searches`) com filtros normalizados
 - ✅ Alertas por frequência (diário/semanal) com notificação de novos anúncios
 - ✅ Página `/dashboard/buscas-salvas` e botão "Salvar busca" na listagem
 - ✅ Disparo manual de alertas pelo admin (`/admin/saved-search-alerts/run`)
 
 ### Páginas públicas
+
 - ✅ `/planos` com comparativo de planos
 - ✅ `/termos` e `/privacidade` (versão de demonstração, revisar com jurídico)
 - ✅ `/categorias/[slug]` com anúncios publicados da categoria
@@ -149,6 +159,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Links de categoria e empresa nos cards e no detalhe do anúncio
 
 ### Catálogo e anúncios
+
 - ✅ Categorias e materiais como dados de referência (migração `seed_reference_catalog`)
 - ✅ Criação/edição de anúncios de compra e venda
 - ✅ Upload de fotos com sanitização (sharp), limite e hash (MinIO/S3)
@@ -158,6 +169,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Favoritos
 
 ### Negociação
+
 - ✅ Propostas, contrapropostas e histórico de revisões
 - ✅ Aceite gera `deal` com reserva de quantidade
 - ✅ Conversas e mensagens com contagem de não lidas
@@ -166,6 +178,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Pagamentos: adapters Mercado Pago e simulado, com chave de idempotência
 
 ### Moderação e administração
+
 - ✅ Fila de moderação de anúncios (aprovar/rejeitar) com auditoria
 - ✅ Painel admin com KPIs e gráficos
 - ✅ Gestão de usuários e papéis com auditoria
@@ -173,6 +186,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Carrossel de reciclagem na home
 
 ### Qualidade
+
 - ✅ Respostas de erro padronizadas com `requestId` e header `X-Request-Id`
 - ✅ Testes unitários da API (8 suítes)
 - ✅ Script E2E do fluxo completo (auth, anúncios, moderação, propostas, deals, conversas, favoritos, notificações, logística, pagamentos, carrossel)
@@ -184,6 +198,7 @@ Documento vivo de acompanhamento. Legenda:
 ## 3. Pendente
 
 ### 3.1 Fase 1 (MVP)
+
 - ✅ Documentos e verificação de empresa
 - ✅ Convite e gestão de membros (`/dashboard/empresa/membros`)
 - ✅ Denúncias (`reports`) e moderação de denúncias
@@ -194,6 +209,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Histórico de status de anúncio e de negociação
 
 ### 3.2 Fase 2
+
 - ✅ Planos e assinaturas self-service (`/dashboard/assinatura`) e desbloqueio de contato (`contact_unlocks`) por benefício de plano (quota) ou avulso — a cobrança real depende do adapter de pagamento
 - ✅ Avaliações e reputação (`reviews`) por negociação concluída
 - ✅ Relatórios ambientais e comerciais
@@ -201,6 +217,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Atributos de material (`material_attributes`, `listing_attributes`)
 
 ### 3.3 Fase 3
+
 - ✅ Logística avançada (shipments, rastreio)
 - ✅ Integrações ERP (API key + CSV)
 - ✅ Recomendação de ofertas
