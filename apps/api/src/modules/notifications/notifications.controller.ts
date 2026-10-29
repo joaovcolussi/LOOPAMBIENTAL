@@ -1,4 +1,12 @@
-import { Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 import { NotificationsService } from './notifications.service';
@@ -8,10 +16,17 @@ import { NotificationsService } from './notifications.service';
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
   @Get()
-  async list(@Req() request: AuthenticatedRequest): Promise<unknown> {
-    return {
-      notifications: await this.notificationsService.list(request.user.id),
-    };
+  list(
+    @Req() request: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('unread') unread?: string,
+  ): Promise<unknown> {
+    return this.notificationsService.list(request.user.id, {
+      cursor: cursor || undefined,
+      pageSize: pageSize ? Number(pageSize) || undefined : undefined,
+      unread: unread === 'true',
+    });
   }
   @Post(':id/read')
   async read(

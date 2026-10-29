@@ -1,19 +1,12 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import type {
+  CheckoutInput,
+  PaymentProvider,
+  ProviderPayment,
+} from './payment-provider';
 
-type CheckoutInput = {
-  transactionId: string;
-  title: string;
-  amount: string;
-  payerEmail?: string;
-};
-
-type MercadoPagoPayment = {
-  id?: string;
-  status?: string;
-  external_reference?: string;
-};
-
-export class MercadoPagoAdapter {
+export class MercadoPagoAdapter implements PaymentProvider {
+  readonly name = 'MERCADO_PAGO' as const;
   private readonly accessToken = process.env.MP_ACCESS_TOKEN;
   private readonly apiUrl =
     process.env.MP_API_URL ?? 'https://api.mercadopago.com';
@@ -65,7 +58,7 @@ export class MercadoPagoAdapter {
     };
   }
 
-  async getPayment(id: string): Promise<MercadoPagoPayment> {
+  async getPayment(id: string): Promise<ProviderPayment> {
     if (!this.accessToken) throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
     const response = await fetch(
       `${this.apiUrl}/v1/payments/${encodeURIComponent(id)}`,
@@ -75,7 +68,7 @@ export class MercadoPagoAdapter {
       },
     );
     if (!response.ok) throw new Error('PAYMENT_PROVIDER_ERROR');
-    return (await response.json()) as MercadoPagoPayment;
+    return (await response.json()) as ProviderPayment;
   }
 
   verifyWebhookSignature(

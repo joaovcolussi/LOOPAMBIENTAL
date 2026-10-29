@@ -17,10 +17,28 @@ export default function ProposalsPage() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  async function loadMore() {
+    if (!nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const result = await api.proposals(nextCursor);
+      setProposals((current) => [...current, ...result.proposals]);
+      setNextCursor(result.pagination.nextCursor);
+    } catch {
+      setLoadError('Não foi possível carregar mais propostas.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
   useEffect(() => {
     api
       .proposals()
-      .then(({ proposals: result }) => setProposals(result))
+      .then(({ proposals: result, pagination }) => {
+        setProposals(result);
+        setNextCursor(pagination.nextCursor);
+      })
       .catch((caught) => {
         if (isAuthenticationError(caught))
           router.replace('/entrar?next=/dashboard/propostas');
@@ -97,6 +115,16 @@ export default function ProposalsPage() {
               </article>
             ))}
           </div>
+        )}
+        {nextCursor && (
+          <button
+            className="secondary-button admin-load-more"
+            type="button"
+            disabled={loadingMore}
+            onClick={loadMore}
+          >
+            {loadingMore ? 'Carregando...' : 'Carregar mais propostas'}
+          </button>
         )}
       </section>
     </main>

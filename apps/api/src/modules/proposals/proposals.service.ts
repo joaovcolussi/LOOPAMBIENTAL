@@ -8,6 +8,12 @@ import {
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { OutboxService } from '../../infrastructure/outbox.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  cursorArgs,
+  PagedResult,
+  PageRequest,
+  toPage,
+} from '../../common/cursor-page';
 
 type ProposalInput = {
   listingId: string;
@@ -114,22 +120,29 @@ export class ProposalsService {
     return proposal;
   }
 
-  async listForUser(userId: string): Promise<unknown> {
+  async listForUser(
+    userId: string,
+    page?: PageRequest,
+  ): Promise<PagedResult<unknown>> {
+    const { pageSize, args } = cursorArgs(page);
     const memberships = await this.prisma.companyMember.findMany({
       where: { userId },
       select: { companyId: true },
     });
     const companyIds = memberships.map((membership) => membership.companyId);
-    return this.prisma.proposal.findMany({
-      where: {
-        OR: [
-          { proposerCompanyId: { in: companyIds } },
-          { listing: { companyId: { in: companyIds } } },
-        ],
-      },
-      orderBy: { createdAt: 'desc' },
-      select: proposalSelect,
-    });
+    return this.prisma.proposal
+      .findMany({
+        where: {
+          OR: [
+            { proposerCompanyId: { in: companyIds } },
+            { listing: { companyId: { in: companyIds } } },
+          ],
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: proposalSelect,
+        ...args,
+      })
+      .then((rows) => toPage(rows, pageSize));
   }
 
   async find(userId: string, id: string): Promise<unknown> {

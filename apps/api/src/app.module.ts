@@ -8,6 +8,10 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaService } from './infrastructure/prisma.service';
 import { OutboxService } from './infrastructure/outbox.service';
+import { RealtimeService } from './infrastructure/realtime.service';
+import { MetricsService } from './infrastructure/observability/metrics.service';
+import { FileRegistryService } from './infrastructure/file-registry.service';
+import { ObservabilityController } from './modules/observability/observability.controller';
 import { ListingsController } from './modules/listings/listings.controller';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
@@ -43,7 +47,10 @@ import { AdminResourcesController } from './modules/admin/admin-resources.contro
 import { AdminResourcesService } from './modules/admin/admin-resources.service';
 import { PaymentsController } from './modules/payments/payments.controller';
 import { PaymentsService } from './modules/payments/payments.service';
-import { LogisticsController } from './modules/logistics/logistics.controller';
+import {
+  AdminLogisticsController,
+  LogisticsController,
+} from './modules/logistics/logistics.controller';
 import { LogisticsService } from './modules/logistics/logistics.service';
 import { ListingMediaStorageService } from './infrastructure/listing-media-storage.service';
 import { AdminMutationGuard } from './modules/auth/admin-mutation.guard';
@@ -90,6 +97,28 @@ import {
   ReviewsController,
 } from './modules/reviews/reviews.controller';
 import { ReviewsService } from './modules/reviews/reviews.service';
+import { RealtimeController } from './modules/realtime/realtime.controller';
+import {
+  AdminDealsController,
+  DealsController,
+} from './modules/deals/deals.controller';
+import { DealsService } from './modules/deals/deals.service';
+import {
+  AccountController,
+  AdminDataRequestsController,
+} from './modules/account/account.controller';
+import { AccountService } from './modules/account/account.service';
+import { CompanyReportsController } from './modules/reports-analytics/company-reports.controller';
+import { CompanyReportsService } from './modules/reports-analytics/company-reports.service';
+import { ListingRecommendationsController } from './modules/listings/listing-recommendations.controller';
+import { ListingRecommendationsService } from './modules/listings/listing-recommendations.service';
+import {
+  CompanyIntegrationsController,
+  ErpIntegrationController,
+} from './modules/integrations/integrations.controller';
+import { IntegrationsService } from './modules/integrations/integrations.service';
+import { ApiKeysService } from './modules/integrations/api-keys.service';
+import { ApiKeyGuard } from './modules/integrations/api-key.guard';
 
 @Controller('health')
 class HealthController {
@@ -157,11 +186,25 @@ class HealthController {
     DealReviewsController,
     ReviewsController,
     PublicCompanyReviewsController,
+    RealtimeController,
+    DealsController,
+    AdminDealsController,
+    AccountController,
+    AdminDataRequestsController,
+    ObservabilityController,
+    AdminLogisticsController,
+    CompanyReportsController,
+    ListingRecommendationsController,
+    CompanyIntegrationsController,
+    ErpIntegrationController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     PrismaService,
     OutboxService,
+    RealtimeService,
+    MetricsService,
+    FileRegistryService,
     AuthService,
     EmailService,
     AuthGuard,
@@ -190,6 +233,13 @@ class HealthController {
     SubscriptionsService,
     ContactUnlocksService,
     ReviewsService,
+    DealsService,
+    AccountService,
+    CompanyReportsService,
+    ListingRecommendationsService,
+    IntegrationsService,
+    ApiKeysService,
+    ApiKeyGuard,
   ],
 })
 export class AppModule {}

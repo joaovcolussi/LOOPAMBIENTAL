@@ -3,9 +3,12 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PaymentsService } from '../payments/payments.service';
 
 const PERIOD_DAYS = 30;
 const PERIOD_MS = PERIOD_DAYS * 24 * 60 * 60 * 1000;
@@ -43,6 +46,7 @@ export class SubscriptionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly payments?: PaymentsService,
   ) {}
 
   listPlans(): Promise<unknown> {
@@ -55,9 +59,13 @@ export class SubscriptionsService {
 
   async getForCompany(userId: string, companyId: string): Promise<unknown> {
     await this.assertMember(userId, companyId);
-    const subscription = await this.findCurrent(companyId);
+    const [subscription, pending] = await Promise.all([
+      this.findCurrent(companyId),
+      this.findPendingCheckout(companyId),
+    ]);
     return {
       subscription,
+      pending,
       usage: await this.buildUsage(companyId, subscription),
     };
   }
@@ -74,6 +82,8 @@ export class SubscriptionsService {
       select: planSelect,
     });
     if (!plan) throw new NotFoundException('PLAN_NOT_FOUND');
+    if (this.payments && new Prisma.Decimal(plan.priceMonthly ?? 0).gt(0))
+      return this.startPaidActivation(userId, companyId, plan);
 
     const now = new Date();
     const periodEnd = new Date(now.getTime() + PERIOD_MS);
@@ -169,11 +179,80 @@ export class SubscriptionsService {
     });
   }
 
+  /**
+   * Paid plans are charged before they activate: a PENDING subscription holds
+   * the chosen plan while the company's current plan keeps working until the
+   * payment settles.
+   */
+  private async startPaidActivation(
+    userId: string,
+    companyId: string,
+    plan: { id: string; name: string; priceMonthly: Prisma.Decimal | string },
+  ) {
+    const current = await this.findCurrent(companyId);
+    if (current?.status === 'ACTIVE' && current.plan.id === plan.id)
+      throw new BadRequestException('PLAN_ALREADY_ACTIVE');
+    const existingPending = await this.prisma.subscription.findFirst({
+      where: { companyId, status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    const pending = existingPending
+      ? await this.prisma.subscription.update({
+          where: { id: existingPending.id },
+          data: { planId: plan.id },
+          select: subscriptionSelect,
+        })
+      : await this.prisma.subscription.create({
+          data: { companyId, planId: plan.id, status: 'PENDING' },
+          select: subscriptionSelect,
+        });
+    const payment = await this.payments!.createCharge({
+      purpose: 'SUBSCRIPTION',
+      userId,
+      companyId,
+      subscriptionId: pending.id,
+      amount: new Prisma.Decimal(plan.priceMonthly).toFixed(2),
+      title: `Assinatura ${plan.name} (30 dias)`,
+      metadata: { planId: plan.id },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorUserId: userId,
+        action: 'SUBSCRIPTION_CHECKOUT_CREATED',
+        resourceType: 'SUBSCRIPTION',
+        resourceId: pending.id,
+        metadata: { companyId, planId: plan.id, paymentId: payment.id },
+      },
+    });
+    return { ...pending, paymentRequired: true, payment };
+  }
+
+  private findPendingCheckout(companyId: string) {
+    return this.prisma.subscription.findFirst({
+      where: {
+        companyId,
+        status: 'PENDING',
+        payments: { some: { status: 'PENDING' } },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        ...subscriptionSelect,
+        payments: {
+          where: { status: 'PENDING' },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true, amount: true, checkoutUrl: true, status: true },
+        },
+      },
+    });
+  }
+
   private findCurrent(companyId: string) {
     return this.prisma.subscription.findFirst({
       where: {
         companyId,
-        status: { in: ['ACTIVE', 'PENDING', 'PAST_DUE'] },
+        status: { in: ['ACTIVE', 'PAST_DUE'] },
       },
       orderBy: { createdAt: 'desc' },
       select: subscriptionSelect,

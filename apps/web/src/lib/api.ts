@@ -13,7 +13,9 @@ export function isAuthenticationError(error: unknown) {
   );
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export const apiBaseUrl = API_URL;
+
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     const method = init?.method?.toUpperCase() ?? 'GET';
@@ -110,8 +112,49 @@ export type Material = {
   categoryId: string;
   defaultUnit: string;
 };
+export type MaterialAttribute = {
+  id: string;
+  key: string;
+  label: string;
+  type: 'TEXT' | 'NUMBER' | 'SELECT' | 'BOOLEAN';
+  unit: string | null;
+  options: string[] | null;
+  isFilterable: boolean;
+  sortOrder: number;
+};
+export type ListingAttributeValue = {
+  valueText: string | null;
+  valueNumber: string | null;
+  attribute: Pick<
+    MaterialAttribute,
+    'id' | 'key' | 'label' | 'type' | 'unit' | 'sortOrder'
+  >;
+};
+export type ListingFormValues = {
+  companyId: string;
+  categoryId: string;
+  materialId?: string;
+  type: 'BUY' | 'SELL';
+  title: string;
+  description?: string;
+  quantity: string;
+  unit: string;
+  unitPrice?: string;
+  frequency?: 'ONE_TIME' | 'WEEKLY' | 'MONTHLY' | 'CONTINUOUS';
+  riskClassification?: 'NON_HAZARDOUS' | 'HAZARDOUS' | 'UNKNOWN';
+  originDetails?: string;
+  ownTransport?: boolean;
+  requiresDocuments?: boolean;
+  city?: string;
+  state?: string;
+  attributes?: { attributeId: string; value: string }[];
+};
 export type ListingDetail = {
   id: string;
+  companyId?: string;
+  categoryId?: string;
+  materialId?: string | null;
+  attributes?: ListingAttributeValue[];
   type: 'BUY' | 'SELL';
   title: string;
   slug: string;
@@ -557,9 +600,79 @@ export type CompanyReviews = {
   summary: { average: number; count: number };
   reviews: Review[];
 };
+export type AccountProfile = AuthUser & {
+  emailVerifiedAt: string | null;
+  mfaEnabledAt: string | null;
+  mfaRecoveryCodesRemaining: number;
+  consents: {
+    id: string;
+    type: 'TERMS' | 'PRIVACY';
+    version: string;
+    acceptedAt: string;
+  }[];
+  currentLegalVersions: { terms: string; privacy: string };
+};
+export type AccountSession = {
+  id: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  expiresAt: string;
+  current: boolean;
+};
+export type CompanyReport = {
+  range: { from: string; to: string };
+  commercial: {
+    dealsByStatus: Record<string, number>;
+    completedDeals: number;
+    revenue: number;
+    spend: number;
+    averageTicket: number;
+    proposalsSent: { total: number; byStatus: Record<string, number> };
+    proposalsReceived: { total: number; byStatus: Record<string, number> };
+    conversionRate: { sent: number; received: number };
+    listingsByStatus: Record<string, number>;
+  };
+  environmental: {
+    divertedKg: number;
+    co2eAvoidedKg: number;
+    treesEquivalent: number;
+    dealsWithoutMassUnit: number;
+    methodology: string;
+  };
+  byCategory: {
+    categoryId: string;
+    name: string;
+    slug: string;
+    deals: number;
+    value: number;
+    kilograms: number;
+    co2eKg: number;
+  }[];
+  monthly: { month: string; sold: number; bought: number; kilograms: number }[];
+};
+export type Recommendation = {
+  listing: ListingCard;
+  score: number;
+  reasons: string[];
+};
+export type ApiKey = {
+  id: string;
+  name: string;
+  prefix: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  createdBy: { id: string; name: string };
+};
+export type PaymentPurpose = 'DEAL' | 'SUBSCRIPTION' | 'CONTACT_UNLOCK';
 export type Payment = {
   id: string;
-  dealId: string;
+  purpose: PaymentPurpose;
+  dealId: string | null;
+  subscriptionId: string | null;
+  listingId: string | null;
+  companyId: string;
   amount: string;
   currency: string;
   provider: string;
@@ -567,7 +680,106 @@ export type Payment = {
   checkoutUrl: string | null;
   paidAt: string | null;
   createdAt: string;
-  deal: { proposal: { listing: { title: string } } };
+  deal?: { proposal: { listing: { title: string } } } | null;
+  listing?: { title: string; slug: string } | null;
+  subscription?: { plan: { name: string } } | null;
+  company?: { legalName: string; tradeName: string | null };
+};
+export type PaymentRequired = { paymentRequired: true; payment: Payment };
+export type DealStatus =
+  | 'OPEN'
+  | 'AWAITING_DOCUMENTS'
+  | 'AWAITING_PAYMENT'
+  | 'AWAITING_PICKUP'
+  | 'IN_TRANSIT'
+  | 'DELIVERED'
+  | 'COMPLETED'
+  | 'DISPUTED'
+  | 'CANCELLED';
+export type DealAction =
+  | 'request-documents'
+  | 'confirm-documents'
+  | 'confirm-shipment'
+  | 'confirm-delivery'
+  | 'complete'
+  | 'dispute'
+  | 'cancel';
+type CompanyRef = {
+  id: string;
+  legalName: string;
+  tradeName: string | null;
+  slug: string | null;
+};
+export type DealSummary = {
+  id: string;
+  status: DealStatus;
+  side: 'BUYER' | 'SELLER';
+  createdAt: string;
+  updatedAt: string;
+  buyerCompanyId: string;
+  sellerCompanyId: string;
+  listing: {
+    id: string;
+    title: string;
+    slug: string;
+    unit: string;
+    type: string;
+  };
+  proposal: {
+    id: string;
+    quantity: string;
+    unitPrice: string;
+    currency: string;
+  };
+  buyerCompany: CompanyRef;
+  sellerCompany: CompanyRef;
+};
+export type DealDetail = DealSummary & {
+  availableActions: DealAction[];
+  statusHistory: DealStatusHistoryEntry[];
+  paymentTransactions: Pick<
+    Payment,
+    | 'id'
+    | 'amount'
+    | 'currency'
+    | 'status'
+    | 'provider'
+    | 'checkoutUrl'
+    | 'paidAt'
+    | 'createdAt'
+  >[];
+  logisticsRequests: {
+    id: string;
+    status: string;
+    origin: string;
+    destination: string;
+    createdAt: string;
+    shipment: { id: string; trackingCode: string; status: string } | null;
+  }[];
+  conversation: { id: string } | null;
+  reviews: { id: string; authorCompanyId: string; rating: number }[];
+};
+export type CursorPagination = {
+  pageSize: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+export type ShipmentEvent = {
+  id: string;
+  status: string;
+  description: string;
+  location: string | null;
+  createdAt: string;
+};
+export type Shipment = {
+  id: string;
+  trackingCode: string;
+  carrierName: string;
+  status: string;
+  estimatedDeliveryAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+  events: ShipmentEvent[];
 };
 export type LogisticsRequest = {
   id: string;
@@ -579,6 +791,10 @@ export type LogisticsRequest = {
   pickupWindow: string | null;
   requirements: string | null;
   status: string;
+  createdAt: string;
+  deal?: { id: string; status: string; listing: { title: string } };
+  requestedBy?: { id: string; name: string };
+  shipment: Shipment | null;
   quotes: {
     id: string;
     carrierName: string;
@@ -707,15 +923,36 @@ export type SavedSearch = {
 };
 
 export const api = {
-  register: (input: { name: string; email: string; password: string }) =>
-    request<{ user: AuthUser }>('/auth/register', {
+  register: (input: {
+    name: string;
+    email: string;
+    password: string;
+    acceptTerms: boolean;
+  }) =>
+    request<{ user: AuthUser; verificationRequired: boolean }>(
+      '/auth/register',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    ),
+  login: (input: { email: string; password: string }) =>
+    request<
+      | { user: AuthUser; mfaRequired?: undefined }
+      | { mfaRequired: true; challengeToken: string; user?: undefined }
+    >('/auth/login', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  login: (input: { email: string; password: string }) =>
-    request<{ user: AuthUser }>('/auth/login', {
+  verifyMfa: (challengeToken: string, code: string) =>
+    request<{ user: AuthUser }>('/auth/mfa/verify', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({ challengeToken, code }),
+    }),
+  resendVerification: (email: string) =>
+    request<{ requested: boolean }>('/auth/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
     }),
   me: () => request<{ user: AuthUser }>('/auth/me'),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
@@ -930,10 +1167,20 @@ export const api = {
   companySubscription: (companyId: string) =>
     request<{
       subscription: CompanySubscription | null;
+      pending:
+        | (CompanySubscription & {
+            payments: Pick<
+              Payment,
+              'id' | 'amount' | 'checkoutUrl' | 'status'
+            >[];
+          })
+        | null;
       usage: SubscriptionUsage;
     }>(`/companies/${companyId}/subscription`),
   activateCompanySubscription: (companyId: string, planId: string) =>
-    request<CompanySubscription>(`/companies/${companyId}/subscription`, {
+    request<
+      CompanySubscription & { paymentRequired?: boolean; payment?: Payment }
+    >(`/companies/${companyId}/subscription`, {
       method: 'POST',
       body: JSON.stringify({ planId }),
     }),
@@ -942,10 +1189,13 @@ export const api = {
       method: 'DELETE',
     }),
   unlockListingContact: (listingId: string, companyId: string) =>
-    request<ContactUnlock>(`/listings/${listingId}/contact-unlock`, {
-      method: 'POST',
-      body: JSON.stringify({ companyId }),
-    }),
+    request<ContactUnlock | PaymentRequired>(
+      `/listings/${listingId}/contact-unlock`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ companyId }),
+      },
+    ),
   listingContactUnlockStatus: (listingId: string) =>
     request<{ unlocked: boolean; unlock: ContactUnlock | null }>(
       `/listings/${listingId}/contact-unlock`,
@@ -984,8 +1234,10 @@ export const api = {
     radiusKm?: number;
     sort?: 'recent' | 'relevance' | 'distance';
     cursor?: string;
+    attr?: string[];
   }) => {
     const params = new URLSearchParams();
+    for (const value of input?.attr ?? []) params.append('attr', value);
     if (input?.page) params.set('page', String(input.page));
     if (input?.pageSize) params.set('pageSize', String(input.pageSize));
     if (input?.q) params.set('q', input.q);
@@ -1024,29 +1276,24 @@ export const api = {
     request<{ listing: ListingDetail & { status: string } }>(
       `/listings/mine/${id}`,
     ),
-  createListing: (input: {
-    companyId: string;
-    categoryId: string;
-    materialId?: string;
-    type: 'BUY' | 'SELL';
-    title: string;
-    description?: string;
-    quantity: string;
-    unit: string;
-    unitPrice?: string;
-    frequency?: 'ONE_TIME' | 'WEEKLY' | 'MONTHLY' | 'CONTINUOUS';
-    riskClassification?: 'NON_HAZARDOUS' | 'HAZARDOUS' | 'UNKNOWN';
-    originDetails?: string;
-    ownTransport?: boolean;
-    requiresDocuments?: boolean;
-    city?: string;
-    state?: string;
-  }) =>
+  createListing: (input: ListingFormValues) =>
     request<{ listing: { id: string } }>('/listings', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  myListings: () => request<{ listings: ListingCard[] }>('/listings/mine'),
+  updateListing: (id: string, input: Partial<ListingFormValues>) =>
+    request<{ listing: { id: string; status: string } }>(`/listings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  categoryAttributes: (categoryId: string) =>
+    request<{ attributes: MaterialAttribute[] }>(
+      `/categories/${categoryId}/attributes`,
+    ),
+  myListings: (cursor?: string) =>
+    request<{ listings: ListingCard[]; pagination: CursorPagination }>(
+      `/listings/mine${adminQuery({ pageSize: 100, cursor })}`,
+    ),
   uploadListingPhotos: (id: string, photos: File[]) => {
     const body = new FormData();
     photos.forEach((photo) => body.append('photos', photo));
@@ -1100,7 +1347,10 @@ export const api = {
       `/listings/${id}/favorite`,
       { method: 'DELETE' },
     ),
-  proposals: () => request<{ proposals: Proposal[] }>('/proposals'),
+  proposals: (cursor?: string) =>
+    request<{ proposals: Proposal[]; pagination: CursorPagination }>(
+      `/proposals${adminQuery({ pageSize: 100, cursor })}`,
+    ),
   proposal: (id: string) => request<{ proposal: Proposal }>(`/proposals/${id}`),
   createProposal: (input: {
     listingId: string;
@@ -1326,5 +1576,219 @@ export const api = {
     request<{ verified: boolean }>('/auth/verify-email', {
       method: 'POST',
       body: JSON.stringify({ token }),
+    }),
+  paymentProvider: () =>
+    request<{ provider: 'SIMULATED' | 'MERCADO_PAGO' }>('/payments/provider'),
+  payment: (id: string) => request<{ payment: Payment }>(`/payments/${id}`),
+  simulatePayment: (id: string, outcome: 'approved' | 'rejected') =>
+    request<{ payment: Payment }>(`/payments/${id}/simulate`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome }),
+    }),
+  deals: (input?: { status?: string; cursor?: string; pageSize?: number }) =>
+    request<{
+      deals: DealSummary[];
+      countsByStatus: Partial<Record<DealStatus, number>>;
+      pagination: CursorPagination;
+    }>(`/deals${adminQuery(input)}`),
+  deal: (id: string) => request<{ deal: DealDetail }>(`/deals/${id}`),
+  dealAction: (id: string, action: DealAction, reason?: string) =>
+    request<{ deal: DealDetail }>(`/deals/${id}/${action}`, {
+      method: 'POST',
+      body: JSON.stringify(reason ? { reason } : {}),
+    }),
+  adminDisputes: () =>
+    request<{ deals: DealSummary[] }>('/admin/deals/disputes'),
+  resolveDispute: (
+    id: string,
+    resolution: 'complete' | 'cancel',
+    notes?: string,
+  ) =>
+    request<{ id: string; status: DealStatus }>(
+      `/admin/deals/${id}/resolve-dispute`,
+      {
+        method: 'POST',
+        headers: { 'X-Admin-Action': '1' },
+        body: JSON.stringify({ resolution, notes }),
+      },
+    ),
+  account: () => request<{ user: AccountProfile }>('/me'),
+  updateAccount: (input: { name: string }) =>
+    request<{ user: AccountProfile }>('/me', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  acceptCurrentTerms: () =>
+    request<{ user: AccountProfile }>('/me/consents', { method: 'POST' }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ changed: boolean }>('/me/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  accountSessions: () =>
+    request<{ sessions: AccountSession[] }>('/me/sessions'),
+  revokeAccountSession: (id: string) =>
+    request<{ revoked: boolean }>(`/me/sessions/${id}`, { method: 'DELETE' }),
+  revokeOtherSessions: () =>
+    request<{ revoked: number }>('/me/sessions/revoke-others', {
+      method: 'POST',
+    }),
+  startMfaSetup: () =>
+    request<{ secret: string; otpauthUrl: string }>('/me/mfa/setup', {
+      method: 'POST',
+    }),
+  enableMfa: (code: string) =>
+    request<{ enabled: boolean; recoveryCodes: string[] }>('/me/mfa/enable', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
+  disableMfa: (password: string, code: string) =>
+    request<{ enabled: boolean }>('/me/mfa/disable', {
+      method: 'POST',
+      body: JSON.stringify({ password, code }),
+    }),
+  dataExportUrl: () => `${API_URL}/me/data-export`,
+  deleteAccount: (password: string, confirmation: string) =>
+    request<{ deleted: boolean }>('/me/delete-account', {
+      method: 'POST',
+      body: JSON.stringify({ password, confirmation }),
+    }),
+  adminDataRequests: () =>
+    request<{
+      requests: {
+        id: string;
+        type: 'EXPORT' | 'DELETION';
+        status: 'COMPLETED' | 'REJECTED';
+        notes: string | null;
+        createdAt: string;
+        completedAt: string | null;
+        user: { id: string; name: string };
+      }[];
+    }>('/admin/data-requests'),
+  adminObservability: () =>
+    request<{
+      uptimeSeconds: number;
+      totalRequests: number;
+      totalErrors: number;
+      memory: { rssMb: number; heapUsedMb: number };
+      counters: Record<string, number>;
+      routes: {
+        method: string;
+        route: string;
+        count: number;
+        errors: number;
+        averageMs: number;
+        p95Ms: number;
+      }[];
+      realtimeConnections: number;
+      outbox: Record<string, number>;
+      failedEvents: {
+        id: string;
+        type: string;
+        attempts: number;
+        lastError: string | null;
+        updatedAt: string;
+      }[];
+      environment: string;
+      paymentProvider: string;
+    }>('/admin/observability'),
+  adminFiles: (status?: string) =>
+    request<{
+      files: {
+        id: string;
+        purpose: string;
+        resourceId: string | null;
+        mimeType: string;
+        sizeBytes: number;
+        sha256: string;
+        accessLevel: string;
+        scanStatus: string;
+        scanEngine: string | null;
+        scanDetails: string | null;
+        createdAt: string;
+        owner: { id: string; name: string };
+      }[];
+      summary: Record<string, number>;
+    }>(`/admin/files${status ? `?status=${status}` : ''}`),
+  simulateLogisticsQuotes: (requestId: string) =>
+    request<{ request: LogisticsRequest }>(
+      `/logistics/requests/${requestId}/simulate-quotes`,
+      { method: 'POST' },
+    ),
+  simulateShipmentEvent: (shipmentId: string) =>
+    request<{ shipment: Shipment }>(
+      `/logistics/shipments/${shipmentId}/simulate-next`,
+      { method: 'POST' },
+    ),
+  adminLogistics: (status?: string) =>
+    request<{ requests: LogisticsRequest[] }>(
+      `/admin/logistics${status ? `?status=${status}` : ''}`,
+    ),
+  adminAddLogisticsQuote: (
+    requestId: string,
+    input: {
+      carrierName: string;
+      amount: string;
+      estimatedDays?: number;
+      notes?: string;
+    },
+  ) =>
+    request<unknown>(`/logistics/requests/${requestId}/quotes`, {
+      method: 'POST',
+      headers: { 'X-Admin-Action': '1' },
+      body: JSON.stringify(input),
+    }),
+  adminShipmentEvent: (
+    shipmentId: string,
+    input: { status: string; description?: string; location?: string },
+  ) =>
+    request<{ shipment: Shipment }>(
+      `/admin/logistics/shipments/${shipmentId}/events`,
+      {
+        method: 'POST',
+        headers: { 'X-Admin-Action': '1' },
+        body: JSON.stringify(input),
+      },
+    ),
+  companyReport: (companyId: string, range?: { from?: string; to?: string }) =>
+    request<CompanyReport>(
+      `/companies/${companyId}/reports${adminQuery(range)}`,
+    ),
+  companyReportCsvUrl: (
+    companyId: string,
+    range?: { from?: string; to?: string },
+  ) =>
+    `${API_URL}/companies/${companyId}/reports/deals.csv${adminQuery(range)}`,
+  recommendations: () =>
+    request<{
+      basedOn: {
+        complementaryCategories: number;
+        favoriteCategories: number;
+        savedSearchCategories: number;
+      };
+      recommendations: Recommendation[];
+    }>('/recommendations'),
+  apiKeys: (companyId: string) =>
+    request<{ keys: ApiKey[] }>(`/companies/${companyId}/api-keys`),
+  createApiKey: (companyId: string, name: string) =>
+    request<{ key: ApiKey; secret: string }>(
+      `/companies/${companyId}/api-keys`,
+      { method: 'POST', body: JSON.stringify({ name }) },
+    ),
+  revokeApiKey: (companyId: string, keyId: string) =>
+    request<{ revoked: boolean }>(`/companies/${companyId}/api-keys/${keyId}`, {
+      method: 'DELETE',
+    }),
+  listingsExportUrl: (companyId: string) =>
+    `${API_URL}/companies/${companyId}/listings/export.csv`,
+  listingsTemplateUrl: (companyId: string) =>
+    `${API_URL}/companies/${companyId}/listings/import-template.csv`,
+  importListings: (companyId: string, csv: string, submit: boolean) =>
+    request<{
+      created: { line: number; id: string; title: string }[];
+      errors: { line: number; error: string }[];
+    }>(`/companies/${companyId}/listings/import`, {
+      method: 'POST',
+      body: JSON.stringify({ csv, submit }),
     }),
 };

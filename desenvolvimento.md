@@ -11,7 +11,43 @@ Documento vivo de acompanhamento. Legenda:
 
 ---
 
-## 1. Em andamento nesta rodada
+## 1. Rodada atual — todas as pendências (ambiente de demonstração)
+
+✅ **Plataforma completa para estudo/demonstração**
+
+- [x] Modo demonstração: aviso em todas as páginas, `pnpm db:demo` com dados fictícios e `PAYMENT_PROVIDER=simulated`
+- [x] Cobrança real de assinaturas/desbloqueios via adapter de pagamento (checkout simulado em `/pagamento-simulado/[id]`, liquidação única e idempotente)
+- [x] Negociações: máquina de estados explícita (`/deals/:id/<ação>`), disputas resolvidas pelo admin, devolução de estoque; páginas `/dashboard/negociacoes`
+- [x] Verificação de e-mail obrigatória para login (`REQUIRE_EMAIL_VERIFICATION`) e reenvio
+- [x] MFA (TOTP + códigos de recuperação), opcionalmente obrigatório para admin (`REQUIRE_ADMIN_MFA`)
+- [x] LGPD: aceite versionado de termos/privacidade, exportação de dados, anonimização de conta, registro em `/admin/lgpd`
+- [x] `/dashboard/configuracoes` e `/dashboard/anuncios/[id]/editar`
+- [x] Tempo real (SSE) para mensagens e notificações
+- [x] Observabilidade: logs JSON, `requestId` + `traceparent`, métricas Prometheus, liveness/readiness, `/admin/observabilidade`
+- [x] CSP/headers de segurança na API e no web
+- [x] Tabela `files` e varredura de uploads por adapter (EICAR, executáveis, PDF com conteúdo ativo)
+- [x] Paginação por cursor (propostas, meus anúncios, notificações, negociações) e limites nas demais listas; KPIs do admin agregados no banco
+- [x] `prompt`/`confirm` substituídos pelo `ConfirmDialog` (hook `useConfirm`)
+- [x] Atributos de material (`material_attributes`, `listing_attributes`) com filtro na busca
+- [x] Relatórios comerciais e ambientais (`/dashboard/relatorios`, CSV)
+- [x] Logística avançada: remessas, eventos de rastreio, cotações simuladas, `/admin/logistica`
+- [x] Integrações ERP: chaves de API, endpoints `X-Api-Key`, importação/exportação CSV (`/dashboard/integracoes`, `/desenvolvedores`)
+- [x] Recomendação de ofertas explicável (`/dashboard/recomendacoes`)
+- [x] Aplicativo móvel como PWA instalável (manifest, service worker, página offline)
+- [x] i18n com next-intl (pt-BR, en, es) — ⚠️ cobre home, banner e navegação; demais telas seguem em pt-BR
+
+### Ressalvas conhecidas
+
+- ⚠️ Tempo real em memória (uma instância); várias instâncias exigem Redis pub/sub.
+- ⚠️ Varredura de uploads por assinaturas e síncrona; produção deve plugar antivírus real (ClamAV) no adapter, de preferência no worker.
+- ⚠️ Fatores de CO₂e ilustrativos, não certificados.
+- ⚠️ Stack frontend ainda diverge do planejado (Tailwind/shadcn, TanStack Query, Recharts); mantida para não reescrever as telas.
+
+---
+
+## 1.0 Rodada anterior
+
+### Revisão geral
 
 ✅ **Revisão geral, testes de operações e melhoria de UI/UX**
 
@@ -25,6 +61,7 @@ Documento vivo de acompanhamento. Legenda:
 - [x] UI/UX: rótulos centralizados (`lib/labels.ts`) e remoção de enums crus; estados de carregamento nas tabelas do admin; diálogo acessível de confirmação/motivo no lugar de `prompt`/`confirm`; correções de acessibilidade (label de mensagem, `aria-label` do campo de valor); fallback neutro de imagem por categoria; estados de erro/parcial no painel; formulário de anúncio sem empresa e com separador decimal pt-BR
 
 ### Próximo planejado
+
 - [ ] Verificação de e-mail obrigatória para login pós-cadastro
 - [ ] Cobrança real de assinaturas/desbloqueios: hoje a ativação interna do plano e o desbloqueio avulso não passam pelo adapter de pagamento
 - [ ] Scanner de uploads; `helmet` CSP fina; observabilidade (logs estruturados, métricas, traces)
@@ -52,6 +89,7 @@ Documento vivo de acompanhamento. Legenda:
 - [x] Login sem timing oracle; `error.tsx` e `not-found.tsx`; retry real na busca; erros tratados
 
 ### Planejado (rodada anterior — ver seção 1 para o status atual)
+
 - [x] Expiração absoluta de sessão (aplicada na rodada atual)
 - [x] Modais acessíveis no lugar de `prompt`/`confirm` (parcial — fluxos principais)
 - [ ] Verificação de e-mail obrigatória para login pós-cadastro
@@ -64,6 +102,7 @@ Documento vivo de acompanhamento. Legenda:
 ## 2. Concluído
 
 ### Plataforma e infraestrutura
+
 - ✅ Monorepo pnpm + Turborepo, TypeScript strict, Prettier
 - ✅ Docker Compose: MySQL 8.4, Redis, MinIO, Mailpit
 - ✅ Prisma + migrações versionadas (`db:migrate`, `db:deploy`, `db:status`)
@@ -71,6 +110,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Worker como processo separado (stub)
 
 ### Conta e acesso
+
 - ✅ Cadastro, login, logout e `GET /auth/me`
 - ✅ Sessão em cookie `HttpOnly`, `SameSite=Lax`, expiração deslizante
 - ✅ Hash de senha com scrypt e comparação em tempo constante
@@ -80,6 +120,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ RBAC de plataforma (USER/MODERATOR/ADMIN) e guards admin/moderação
 
 ### Empresas
+
 - ✅ Criação, listagem e edição de empresa
 - ✅ Membros com papéis OWNER/ADMIN/MEMBER
 - ✅ CNPJ criptografado + hash normalizado (unicidade)
@@ -91,22 +132,26 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Gestão de membros: papéis (proprietário/admin/membro), alteração e remoção
 
 ### Denúncias e moderação
+
 - ✅ Denúncias de anúncio, empresa, usuário e mensagem
 - ✅ Fila de denúncias no admin com resolver/arquivar e observações
 - ✅ Botão de denúncia na página do anúncio
 
 ### Rastreabilidade
+
 - ✅ Histórico imutável de status do anúncio (`listing_status_history`)
 - ✅ Histórico imutável de status da negociação (`deal_status_history`)
 - ✅ Timeline no detalhe do anúncio (proprietário) e da proposta
 
 ### Descoberta
+
 - ✅ Buscas salvas (`saved_searches`) com filtros normalizados
 - ✅ Alertas por frequência (diário/semanal) com notificação de novos anúncios
 - ✅ Página `/dashboard/buscas-salvas` e botão "Salvar busca" na listagem
 - ✅ Disparo manual de alertas pelo admin (`/admin/saved-search-alerts/run`)
 
 ### Páginas públicas
+
 - ✅ `/planos` com comparativo de planos
 - ✅ `/termos` e `/privacidade` (versão de demonstração, revisar com jurídico)
 - ✅ `/categorias/[slug]` com anúncios publicados da categoria
@@ -114,6 +159,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Links de categoria e empresa nos cards e no detalhe do anúncio
 
 ### Catálogo e anúncios
+
 - ✅ Categorias e materiais como dados de referência (migração `seed_reference_catalog`)
 - ✅ Criação/edição de anúncios de compra e venda
 - ✅ Upload de fotos com sanitização (sharp), limite e hash (MinIO/S3)
@@ -123,14 +169,16 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Favoritos
 
 ### Negociação
+
 - ✅ Propostas, contrapropostas e histórico de revisões
 - ✅ Aceite gera `deal` com reserva de quantidade
 - ✅ Conversas e mensagens com contagem de não lidas
 - ✅ Notificações in-app (criação, leitura e leitura em massa)
 - ✅ Logística: solicitação e cotações (cotações via admin)
-- ✅ Pagamentos: adapter Mercado Pago com chave de idempotência
+- ✅ Pagamentos: adapters Mercado Pago e simulado, com chave de idempotência
 
 ### Moderação e administração
+
 - ✅ Fila de moderação de anúncios (aprovar/rejeitar) com auditoria
 - ✅ Painel admin com KPIs e gráficos
 - ✅ Gestão de usuários e papéis com auditoria
@@ -138,6 +186,7 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Carrossel de reciclagem na home
 
 ### Qualidade
+
 - ✅ Respostas de erro padronizadas com `requestId` e header `X-Request-Id`
 - ✅ Testes unitários da API (8 suítes)
 - ✅ Script E2E do fluxo completo (auth, anúncios, moderação, propostas, deals, conversas, favoritos, notificações, logística, pagamentos, carrossel)
@@ -149,6 +198,7 @@ Documento vivo de acompanhamento. Legenda:
 ## 3. Pendente
 
 ### 3.1 Fase 1 (MVP)
+
 - ✅ Documentos e verificação de empresa
 - ✅ Convite e gestão de membros (`/dashboard/empresa/membros`)
 - ✅ Denúncias (`reports`) e moderação de denúncias
@@ -159,18 +209,20 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Histórico de status de anúncio e de negociação
 
 ### 3.2 Fase 2
+
 - ✅ Planos e assinaturas self-service (`/dashboard/assinatura`) e desbloqueio de contato (`contact_unlocks`) por benefício de plano (quota) ou avulso — a cobrança real depende do adapter de pagamento
 - ✅ Avaliações e reputação (`reviews`) por negociação concluída
-- ⬜ Relatórios ambientais e comerciais
+- ✅ Relatórios ambientais e comerciais
 - ✅ Geolocalização avançada (coordenadas indexadas, filtro por distância e ordenação)
-- ⬜ Atributos de material (`material_attributes`, `listing_attributes`)
+- ✅ Atributos de material (`material_attributes`, `listing_attributes`)
 
 ### 3.3 Fase 3
-- ⬜ Logística avançada (shipments, rastreio)
-- ⬜ Integrações ERP
-- ⬜ Recomendação de ofertas
-- ⬜ API pública
-- ⬜ Aplicativo móvel
+
+- ✅ Logística avançada (shipments, rastreio)
+- ✅ Integrações ERP (API key + CSV)
+- ✅ Recomendação de ofertas
+- ✅ API pública (`/integrations`, docs em `/desenvolvedores`)
+- ✅ Aplicativo móvel (PWA instalável)
 
 ---
 
@@ -181,23 +233,22 @@ Documento vivo de acompanhamento. Legenda:
 - ✅ Worker processando o outbox (e-mail de verificação, negociação e pagamento) com retry/backoff
 - ✅ E2E com Playwright (fluxo completo + smoke) e testes unitários do frontend (Vitest)
 - ✅ Rate limiting global e em pontos sensíveis de autenticação (`@nestjs/throttler`)
-- ⬜ Tempo real (WebSocket/SSE) para mensagens e notificações
-- ⬜ Scanner de malware assíncrono e tabela `files`
-- ⬜ MFA (obrigatório para admin)
-- ⬜ Observabilidade: logs estruturados, métricas, traces e alertas
-- ⬜ Ferramentas LGPD (exportação, exclusão, retenção)
-- ⬜ i18n com next-intl
+- ✅ Tempo real (SSE) para mensagens e notificações
+- ⚠️ Scanner de malware (adapter por assinaturas, síncrono) e tabela `files`
+- ✅ MFA (obrigatório para admin via `REQUIRE_ADMIN_MFA`)
+- ✅ Observabilidade: logs estruturados, métricas, correlação de traces (alertas externos pendentes)
+- ✅ Ferramentas LGPD (exportação, anonimização, aceite versionado)
+- ⚠️ i18n com next-intl (páginas públicas principais)
 - ⚠️ Stack frontend divergente do planejado (Tailwind/shadcn/Radix, React Hook Form, Zod, TanStack Query, Zustand, Recharts, MapLibre)
 
 ---
 
 ## 5. Próximos passos sugeridos
 
-1. Integrar cobrança real de assinaturas e desbloqueios ao adapter de pagamento.
-2. Tempo real (SSE/WebSocket) para mensagens e notificações.
-3. Rate limiting, MFA para administradores e observabilidade.
-4. Relatórios ambientais e comerciais.
-5. Atributos técnicos de material (`material_attributes`, `listing_attributes`).
+1. Redis pub/sub para SSE com várias instâncias da API.
+2. Antivírus real (ClamAV) no adapter de varredura, executado pelo worker.
+3. Traduzir o restante das telas autenticadas.
+4. Migrar o frontend gradualmente para a stack planejada (Tailwind/shadcn, TanStack Query).
 
 ## 6. Notas de implementação
 
@@ -207,5 +258,6 @@ Documento vivo de acompanhamento. Legenda:
 - **Avaliações**: uma avaliação por empresa/negociação, liberada após `COMPLETED`; `rating_average`/`rating_count` são recalculados na mesma transação do `review`. A reputação é pública em `/companies/:slug/reviews`.
 - **Geolocalização**: `latitude`/`longitude` (Decimal 10,7) em empresas e anúncios. A busca por raio usa pré-filtro por bounding box com índice `(latitude, longitude)` e refinamento por `ST_Distance_Sphere`; a ordenação por distância só é aplicada quando há coordenadas válidas (`sort=distance`).
 - **Migrações**: `20260930260000_add_plans_outbox_fulltext`, `20260930270000_add_contact_unlocks`, `20260930280000_add_reviews`, `20260930290000_add_geo_coordinates` e `20260930300000_seed_reference_catalog` (categorias/materiais de referência).
-- **Seed**: não há dados de demonstração. O catálogo é referência (migração) e os testes E2E criam suas próprias contas/empresas/anúncios via API.
+- **Seed**: `pnpm db:demo` (packages/database/src/demo-seed.ts) cria dados fictícios idempotentes; o catálogo e os atributos são dados de referência (migrações). Os testes E2E criam suas próprias contas.
+- **Migrações novas**: `20261029090000_demo_platform_features` (cobranças genéricas, MFA, LGPD, files, atributos, remessas, chaves de API) e `20261029091000_seed_material_attributes`.
 - **Auditoria**: relatório em `docs/security/auditoria-2026-09.md`.

@@ -1,0 +1,61 @@
+{
+  "demo": {
+    "title": "Ambiente de demonstração.",
+    "body": "Dados fictícios e pagamentos simulados — nenhuma cobrança real é feita."
+  },
+  "language": {
+    "label": "Idioma",
+    "hint": "A tradução cobre as páginas públicas principais; as demais telas seguem em português."
+  },
+  "dashboardHeader": {
+    "back": "Voltar ao painel"
+  },
+  "nav": {
+    "howItWorks": "Como funciona",
+    "listings": "Anúncios",
+    "plans": "Planos",
+    "forCompanies": "Para empresas",
+    "developers": "API"
+  },
+  "home": {
+    "eyebrow": "marketplace B2B de resíduos industriais",
+    "title": "O resíduo de uma indústria pode ser o insumo estratégico de outra.",
+    "lede": "Conecte geradores a compradores de resíduos e subprodutos, reduza custos de descarte e gere valor para a cadeia produtiva.",
+    "explore": "Explorar oportunidades",
+    "advertise": "Quero anunciar",
+    "trust": "Empresas e operações verificadas",
+    "statsPublished": "anúncios publicados",
+    "statsBuy": "demanda de compra",
+    "statsSell": "oferta de venda",
+    "statsVerified": "empresas verificadas",
+    "pulseEyebrow": "pulso da cadeia",
+    "pulseTitle": "Onde a indústria está encontrando valor.",
+    "pulseBody": "Distribuição dos anúncios publicados por categoria na rede LOOP AMBIENTAL.",
+    "pulseLink": "Ver oportunidades ativas",
+    "pulseChart": "anúncios por categoria",
+    "pulseAria": "Movimento por categoria",
+    "pulseEmpty": "Ainda não há dados.",
+    "problemsEyebrow": "impacto que começa na operação",
+    "problemsTitle": "Problemas ambientais que a LOOP ajuda a resolver.",
+    "problem1Title": "Transporte e descarte desnecessários",
+    "problem1Body": "Aproximamos oferta e demanda para reduzir deslocamentos sem destino comercial e custos de descarte.",
+    "problem2Title": "Resíduo tratado como perda",
+    "problem2Body": "Damos visibilidade a materiais que podem voltar para processos produtivos como matéria-prima ou subproduto.",
+    "problem3Title": "Baixa rastreabilidade ambiental",
+    "problem3Body": "Organizamos empresas, propostas e informações da operação para apoiar decisões mais responsáveis e circulares.",
+    "recentEyebrow": "oportunidades recentes",
+    "recentTitle": "Resíduos com valor comercial",
+    "recentAll": "Ver todas as oportunidades",
+    "searchAria": "Buscar por material, categoria ou cidade",
+    "searchPlaceholder": "Busque por resíduo, subproduto ou cidade",
+    "searchButton": "Buscar",
+    "empty": "Ainda não há anúncios publicados.",
+    "closingEyebrow": "feito para o mercado real",
+    "closingLine1": "Menos descarte.",
+    "closingLine2": "Mais valor.",
+    "start": "Começar agora",
+    "footerTerms": "Termos",
+    "footerPrivacy": "Privacidade",
+    "footerTagline": "Mercado circular para negócios melhores."
+  }
+}

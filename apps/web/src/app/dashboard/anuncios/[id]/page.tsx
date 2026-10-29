@@ -1,8 +1,10 @@
 'use client';
 
+import { useConfirm } from '../../../../hooks/use-confirm';
 import { ArrowLeft, Recycle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
+import { formatAttributeValue } from '../../../../components/listing-attribute-fields';
 import { SessionActions } from '../../../../components/session-actions';
 import {
   api,
@@ -26,6 +28,7 @@ import {
 type OwnedListing = ListingDetail & { status: string };
 
 export default function OwnedListingPage() {
+  const { confirm, dialog } = useConfirm();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [listing, setListing] = useState<OwnedListing | null>(null);
@@ -95,7 +98,13 @@ export default function OwnedListingPage() {
   }
 
   async function removeDocument(document: ListingDocument) {
-    if (!window.confirm(`Remover o laudo "${document.fileName}"?`)) return;
+    const confirmed = await confirm({
+      title: 'Remover laudo',
+      description: `Remover o laudo "${document.fileName}"? Anúncios publicados voltam para análise.`,
+      tone: 'danger',
+      confirmLabel: 'Remover',
+    });
+    if (confirmed === null) return;
     setRemovingId(document.id);
     setMessage('');
     try {
@@ -154,11 +163,21 @@ export default function OwnedListingPage() {
               {listingStatusLabels[listing.status] ?? listing.status}
             </span>
           </div>
-          {listing.status === 'PUBLISHED' && (
-            <a className="button small" href={`/anuncios/${listing.slug}`}>
-              Abrir página pública
-            </a>
-          )}
+          <div className="deal-actions">
+            {!['CLOSED', 'ARCHIVED'].includes(listing.status) && (
+              <a
+                className="secondary-button small"
+                href={`/dashboard/anuncios/${listing.id}/editar`}
+              >
+                Editar anúncio
+              </a>
+            )}
+            {listing.status === 'PUBLISHED' && (
+              <a className="button small" href={`/anuncios/${listing.slug}`}>
+                Abrir página pública
+              </a>
+            )}
+          </div>
         </div>
         <div className="owned-media-grid">
           {listing.media.map((media) => (
@@ -184,6 +203,16 @@ export default function OwnedListingPage() {
           <p className="detail-description">
             {listing.description || 'Sem descrição.'}
           </p>
+          {listing.attributes && listing.attributes.length > 0 && (
+            <dl className="attribute-list">
+              {listing.attributes.map((entry) => (
+                <div key={entry.attribute.id}>
+                  <dt>{entry.attribute.label}</dt>
+                  <dd>{formatAttributeValue(entry)}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
           <p>
             <strong>
               {formatQuantity(listing.availableQuantity)} {listing.unit}
@@ -279,6 +308,7 @@ export default function OwnedListingPage() {
           </section>
         )}
       </section>
+      {dialog}
     </main>
   );
 }

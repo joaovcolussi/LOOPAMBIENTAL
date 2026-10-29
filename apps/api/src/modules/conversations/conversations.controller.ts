@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -40,9 +41,14 @@ export class ConversationsController {
   async messages(
     @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
+    @Query('before') before?: string,
   ): Promise<unknown> {
     return {
-      messages: await this.conversationsService.messages(request.user.id, id),
+      messages: await this.conversationsService.messages(
+        request.user.id,
+        id,
+        before || undefined,
+      ),
     };
   }
   @Post(':id/messages')

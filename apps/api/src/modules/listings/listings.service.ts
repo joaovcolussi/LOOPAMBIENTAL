@@ -9,6 +9,18 @@ import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { ListingMediaStorageService } from '../../infrastructure/listing-media-storage.service';
+import {
+  cursorArgs,
+  PagedResult,
+  PageRequest,
+  toPage,
+} from '../../common/cursor-page';
+import {
+  AttributeValueInput,
+  listingAttributeSelect,
+  normalizeAttributes,
+  replaceListingAttributes,
+} from './listing-attributes';
 
 export type ListingInput = {
   companyId: string;
@@ -29,6 +41,7 @@ export type ListingInput = {
   state?: string;
   latitude?: number;
   longitude?: number;
+  attributes?: AttributeValueInput[];
 };
 
 export const LISTING_DOCUMENT_TYPES = [
@@ -106,6 +119,14 @@ const listingSelect = {
 
 const listingDetailSelect = {
   ...listingSelect,
+  categoryId: true,
+  materialId: true,
+  latitude: true,
+  longitude: true,
+  attributes: {
+    orderBy: { attribute: { sortOrder: 'asc' as const } },
+    select: listingAttributeSelect,
+  },
   documents: {
     where: activeDocumentsWhere,
     orderBy: { createdAt: 'asc' as const },
@@ -155,18 +176,24 @@ export class ListingsService {
     private readonly mediaStorage: ListingMediaStorageService,
   ) {}
 
-  async findForUser(userId: string): Promise<unknown> {
+  async findForUser(
+    userId: string,
+    page?: PageRequest,
+  ): Promise<PagedResult<unknown>> {
+    const { pageSize, args } = cursorArgs(page);
     const memberships = await this.prisma.companyMember.findMany({
       where: { userId },
       select: { companyId: true },
     });
     const companyIds = memberships.map((m) => m.companyId);
-    if (companyIds.length === 0) return [];
-    return this.prisma.listing.findMany({
+    if (companyIds.length === 0) return toPage([], pageSize);
+    const rows = await this.prisma.listing.findMany({
       where: { companyId: { in: companyIds }, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: listingSelect,
+      ...args,
     });
+    return toPage(rows, pageSize);
   }
 
   async findForUserById(userId: string, id: string): Promise<unknown> {
@@ -244,6 +271,9 @@ export class ListingsService {
       input.quantity,
       'INVALID_QUANTITY',
     );
+    const attributes = input.attributes
+      ? await this.validateAttributes(input.categoryId, input.attributes)
+      : [];
     return this.prisma.$transaction(async (transaction) => {
       const listing = await transaction.listing.create({
         data: {
@@ -282,6 +312,8 @@ export class ListingsService {
           reason: 'LISTING_CREATED',
         },
       });
+      if (attributes.length)
+        await replaceListingAttributes(transaction, listing.id, attributes);
       return listing;
     });
   }
@@ -314,7 +346,13 @@ export class ListingsService {
     }[] = [];
     try {
       for (const file of files)
-        uploads.push(await this.mediaStorage.upload(file));
+        uploads.push(
+          await this.mediaStorage.upload(file, {
+            ownerUserId: userId,
+            purpose: 'LISTING_MEDIA',
+            resourceId: id,
+          }),
+        );
 
       return await this.prisma.$transaction(async (transaction) => {
         const media = await Promise.all(
@@ -433,6 +471,7 @@ export class ListingsService {
     const upload = await this.mediaStorage.uploadDocument(
       file,
       'listing-documents',
+      { ownerUserId: userId, purpose: 'LISTING_DOCUMENT', resourceId: id },
     );
     try {
       return await this.prisma.$transaction(async (transaction) => {
@@ -600,6 +639,11 @@ export class ListingsService {
     const quantity = input.quantity
       ? this.parsePositiveDecimal(input.quantity, 'INVALID_QUANTITY')
       : undefined;
+    const targetCategoryId = input.categoryId ?? listing.categoryId;
+    const categoryChanged = targetCategoryId !== listing.categoryId;
+    const attributes = input.attributes
+      ? await this.validateAttributes(targetCategoryId, input.attributes)
+      : null;
     // A listing under negotiation has committed stock reserved by the accepted
     // proposal. Allowing quantity/type/price edits here would re-inflate the
     // available quantity and enable overselling, so those fields are frozen
@@ -674,6 +718,13 @@ export class ListingsService {
       });
       if (changed.count !== 1)
         throw new ConflictException('LISTING_STATE_CHANGED');
+      if (attributes)
+        await replaceListingAttributes(transaction, id, attributes);
+      else if (categoryChanged)
+        // Attributes belong to a category; stale ones are dropped on change.
+        await transaction.listingAttribute.deleteMany({
+          where: { listingId: id },
+        });
       if (listing.status === 'PUBLISHED') {
         await transaction.moderationCase.create({ data: { listingId: id } });
         await transaction.listingStatusHistory.create({
@@ -845,6 +896,17 @@ export class ListingsService {
     if (!adminOnly && membership.role === 'MEMBER' && creatorId !== userId)
       throw new ForbiddenException('LISTING_MANAGEMENT_REQUIRED');
   }
+  private async validateAttributes(
+    categoryId: string,
+    values: AttributeValueInput[],
+  ) {
+    const definitions = await this.prisma.materialAttribute.findMany({
+      where: { categoryId },
+      select: { id: true, type: true, options: true },
+    });
+    return normalizeAttributes(definitions, values);
+  }
+
   private async assertCatalog(categoryId: string, materialId?: string) {
     if (
       !(await this.prisma.wasteCategory.findUnique({

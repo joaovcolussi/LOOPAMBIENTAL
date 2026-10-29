@@ -13,6 +13,7 @@ import type { Request, Response } from 'express';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { AuthService } from '../auth/auth.service';
 import { readSessionToken } from '../auth/session';
+import { parsePageRequest } from '../../common/cursor-page';
 import { ListingsService } from './listings.service';
 import { privateDownload } from '../../common/content-disposition';
 import {
@@ -30,10 +31,16 @@ export class ListingsController {
 
   @Get('mine')
   @UseGuards(AuthGuard)
-  async findMine(@Req() request: AuthenticatedRequest) {
-    return {
-      listings: await this.listingsService.findForUser(request.user.id),
-    };
+  async findMine(
+    @Req() request: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const page = await this.listingsService.findForUser(
+      request.user.id,
+      parsePageRequest(cursor, pageSize),
+    );
+    return { listings: page.items, pagination: page.pagination };
   }
 
   @Get('mine/:id')
@@ -138,6 +145,7 @@ export class ListingsController {
     @Query('radiusKm') radiusKm?: string,
     @Query('sort') sort?: string,
     @Query('cursor') cursor?: string,
+    @Query('attr') attr?: string | string[],
   ): Promise<unknown> {
     return this.listingSearch.search({
       filters: normalizeListingSearchFilters({
@@ -153,6 +161,7 @@ export class ListingsController {
         longitude,
         radiusKm,
         sort,
+        attr,
       }),
       cursor,
       page: this.parsePositiveInteger(pageValue, 1),

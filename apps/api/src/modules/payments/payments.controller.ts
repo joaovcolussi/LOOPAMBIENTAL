@@ -22,6 +22,11 @@ export class PaymentsController {
     return { payments: await this.payments.listForUser(request.user.id) };
   }
 
+  @Get('provider')
+  provider() {
+    return { provider: this.payments.providerName };
+  }
+
   @Post('checkout')
   @UseGuards(AuthGuard, AuthenticatedMutationGuard)
   checkout(
@@ -48,5 +53,30 @@ export class PaymentsController {
       request.query['data.id'],
       request.query.type,
     );
+  }
+
+  @Get(':id')
+  @UseGuards(AuthGuard)
+  async get(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<unknown> {
+    return { payment: await this.payments.getForUser(request.user.id, id) };
+  }
+
+  @Post(':id/simulate')
+  @UseGuards(AuthGuard, AuthenticatedMutationGuard)
+  async simulate(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: { outcome?: unknown },
+  ): Promise<unknown> {
+    return {
+      payment: await this.payments.simulate(
+        request.user.id,
+        id,
+        typeof body.outcome === 'string' ? body.outcome : '',
+      ),
+    };
   }
 }

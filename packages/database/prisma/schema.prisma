@@ -76,6 +76,8 @@ enum NotificationType {
   COMPANY_VERIFIED
   COMPANY_VERIFICATION_REJECTED
   SAVED_SEARCH_MATCH
+  PAYMENT_CONFIRMED
+  SHIPMENT_UPDATED
   SYSTEM
 
   @@map("notification_type")
@@ -84,6 +86,7 @@ enum NotificationType {
 enum AuthTokenType {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+  MFA_CHALLENGE
 
   @@map("auth_token_type")
 }
@@ -301,6 +304,79 @@ enum ContactUnlockSource {
   @@map("contact_unlock_source")
 }
 
+enum PaymentPurpose {
+  DEAL
+  SUBSCRIPTION
+  CONTACT_UNLOCK
+
+  @@map("payment_purpose")
+}
+
+enum ConsentType {
+  TERMS
+  PRIVACY
+
+  @@map("consent_type")
+}
+
+enum DataRequestType {
+  EXPORT
+  DELETION
+
+  @@map("data_request_type")
+}
+
+enum DataRequestStatus {
+  COMPLETED
+  REJECTED
+
+  @@map("data_request_status")
+}
+
+enum FilePurpose {
+  LISTING_MEDIA
+  LISTING_DOCUMENT
+  COMPANY_DOCUMENT
+  CAROUSEL
+
+  @@map("file_purpose")
+}
+
+enum FileAccessLevel {
+  PUBLIC
+  PRIVATE
+
+  @@map("file_access_level")
+}
+
+enum FileScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  ERROR
+
+  @@map("file_scan_status")
+}
+
+enum MaterialAttributeType {
+  TEXT
+  NUMBER
+  SELECT
+  BOOLEAN
+
+  @@map("material_attribute_type")
+}
+
+enum ShipmentStatus {
+  SCHEDULED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+
+  @@map("shipment_status")
+}
+
 enum OutboxEventStatus {
   PENDING
   PROCESSING
@@ -319,6 +395,9 @@ model User {
   status                   UserStatus                @default(PENDING)
   platformRole             PlatformRole              @default(USER) @map("platform_role")
   emailVerifiedAt          DateTime?                 @map("email_verified_at") @db.DateTime(3)
+  mfaSecretEncrypted       String?                   @map("mfa_secret_encrypted") @db.Text
+  mfaEnabledAt             DateTime?                 @map("mfa_enabled_at") @db.DateTime(3)
+  mfaRecoveryCodes         Json?                     @map("mfa_recovery_codes")
   createdAt                DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt                DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
   deletedAt                DateTime?                 @map("deleted_at") @db.DateTime(3)
@@ -353,6 +432,11 @@ model User {
   platformSettingsUpdated  PlatformSetting[]         @relation("platform_setting_updater")
   contactUnlocks           ContactUnlock[]           @relation("contact_unlock_user")
   reviewsAuthored          Review[]                  @relation("review_author")
+  consents                 UserConsent[]
+  dataRequests             DataRequest[]
+  files                    FileObject[]              @relation("file_owner")
+  shipmentEvents           ShipmentEvent[]
+  apiKeysCreated           ApiKey[]                  @relation("api_key_creator")
 
   @@index([status])
   @@index([platformRole])
@@ -414,6 +498,7 @@ model Company {
   contactUnlocks      ContactUnlock[]       @relation("company_contact_unlocks")
   reviewsAsReviewer   Review[]              @relation("review_reviewer_company")
   reviewsReceived     Review[]              @relation("review_reviewed_company")
+  apiKeys             ApiKey[]
   ratingAverage       Decimal               @default(0) @map("rating_average") @db.Decimal(3, 2)
   ratingCount         Int                   @default(0) @map("rating_count")
 
@@ -587,16 +672,17 @@ model SavedSearch {
 }
 
 model WasteCategory {
-  id        String          @id @default(uuid()) @db.VarChar(36)
-  name      String          @db.VarChar(120)
-  slug      String          @unique @db.VarChar(140)
-  parentId  String?         @map("parent_id") @db.VarChar(36)
-  parent    WasteCategory?  @relation("category_tree", fields: [parentId], references: [id], onDelete: Restrict)
-  children  WasteCategory[] @relation("category_tree")
-  materials Material[]
-  listings  Listing[]
-  createdAt DateTime        @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
+  id         String              @id @default(uuid()) @db.VarChar(36)
+  name       String              @db.VarChar(120)
+  slug       String              @unique @db.VarChar(140)
+  parentId   String?             @map("parent_id") @db.VarChar(36)
+  parent     WasteCategory?      @relation("category_tree", fields: [parentId], references: [id], onDelete: Restrict)
+  children   WasteCategory[]     @relation("category_tree")
+  materials  Material[]
+  listings   Listing[]
+  attributes MaterialAttribute[]
+  createdAt  DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt  DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
 
   @@index([parentId])
   @@map("waste_categories")
@@ -665,6 +751,8 @@ model Listing {
   reports            Report[]               @relation("report_listing")
   statusHistory      ListingStatusHistory[] @relation("listing_status_history")
   contactUnlocks     ContactUnlock[]        @relation("listing_contact_unlocks")
+  attributes         ListingAttribute[]
+  payments           PaymentTransaction[]   @relation("payment_listing")
 
   @@index([status, type, publishedAt(sort: Desc)])
   @@index([categoryId, status])
@@ -861,24 +949,32 @@ model Deal {
 }
 
 model PaymentTransaction {
-  idempotencyKey String        @unique @map("idempotency_key") @db.VarChar(100)
-  id             String        @id @default(uuid()) @db.VarChar(36)
-  dealId         String        @map("deal_id") @db.VarChar(36)
-  companyId      String        @map("company_id") @db.VarChar(36)
-  provider       String        @db.VarChar(40)
-  externalId     String?       @unique @map("external_id") @db.VarChar(180)
-  amount         Decimal       @db.Decimal(14, 2)
-  currency       String        @default("BRL") @db.Char(3)
-  status         PaymentStatus @default(INITIATED)
-  checkoutUrl    String?       @map("checkout_url") @db.Text
-  metadata       Json?
-  paidAt         DateTime?     @map("paid_at") @db.DateTime(3)
-  createdAt      DateTime      @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt      DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
-  deal           Deal          @relation(fields: [dealId], references: [id], onDelete: Restrict)
-  company        Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  idempotencyKey  String         @unique @map("idempotency_key") @db.VarChar(100)
+  id              String         @id @default(uuid()) @db.VarChar(36)
+  purpose         PaymentPurpose @default(DEAL)
+  dealId          String?        @map("deal_id") @db.VarChar(36)
+  subscriptionId  String?        @map("subscription_id") @db.VarChar(36)
+  listingId       String?        @map("listing_id") @db.VarChar(36)
+  createdByUserId String?        @map("created_by_user_id") @db.VarChar(36)
+  companyId       String         @map("company_id") @db.VarChar(36)
+  provider        String         @db.VarChar(40)
+  externalId      String?        @unique @map("external_id") @db.VarChar(180)
+  amount          Decimal        @db.Decimal(14, 2)
+  currency        String         @default("BRL") @db.Char(3)
+  status          PaymentStatus  @default(INITIATED)
+  checkoutUrl     String?        @map("checkout_url") @db.Text
+  metadata        Json?
+  paidAt          DateTime?      @map("paid_at") @db.DateTime(3)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
+  deal            Deal?          @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  subscription    Subscription?  @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  listing         Listing?       @relation("payment_listing", fields: [listingId], references: [id], onDelete: Restrict)
+  company         Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([dealId, status])
+  @@index([subscriptionId, status])
+  @@index([listingId, companyId, status])
   @@index([companyId, createdAt])
   @@map("payment_transactions")
 }
@@ -899,6 +995,7 @@ model LogisticsRequest {
   deal              Deal                   @relation(fields: [dealId], references: [id], onDelete: Restrict)
   requestedBy       User                   @relation(fields: [requestedByUserId], references: [id], onDelete: Restrict)
   quotes            LogisticsQuote[]
+  shipment          Shipment?
 
   @@index([dealId, status])
   @@index([requestedByUserId, createdAt])
@@ -1000,16 +1097,16 @@ model AuthToken {
 }
 
 model Plan {
-  id           String         @id @default(uuid()) @db.VarChar(36)
-  code         String         @unique @db.VarChar(60)
-  name         String         @db.VarChar(120)
-  description  String?        @db.Text
-  priceMonthly Decimal        @map("price_monthly") @db.Decimal(14, 2)
-  currency     String         @default("BRL") @db.Char(3)
-  features     Json?
-  isActive     Boolean        @default(true) @map("is_active")
-  createdAt    DateTime       @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt    DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
+  id            String         @id @default(uuid()) @db.VarChar(36)
+  code          String         @unique @db.VarChar(60)
+  name          String         @db.VarChar(120)
+  description   String?        @db.Text
+  priceMonthly  Decimal        @map("price_monthly") @db.Decimal(14, 2)
+  currency      String         @default("BRL") @db.Char(3)
+  features      Json?
+  isActive      Boolean        @default(true) @map("is_active")
+  createdAt     DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
   subscriptions Subscription[]
 
   @@index([isActive])
@@ -1017,20 +1114,21 @@ model Plan {
 }
 
 model Subscription {
-  id                 String             @id @default(uuid()) @db.VarChar(36)
-  companyId          String             @map("company_id") @db.VarChar(36)
-  planId             String             @map("plan_id") @db.VarChar(36)
-  provider           String             @default("INTERNAL") @db.VarChar(40)
-  externalId         String?            @map("external_id") @db.VarChar(180)
-  status             SubscriptionStatus @default(PENDING)
-  currentPeriodStart DateTime?          @map("current_period_start") @db.DateTime(3)
-  currentPeriodEnd   DateTime?          @map("current_period_end") @db.DateTime(3)
-  cancelAt           DateTime?          @map("cancel_at") @db.DateTime(3)
-  cancelledAt        DateTime?          @map("cancelled_at") @db.DateTime(3)
-  createdAt          DateTime           @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt          DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
-  company            Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  plan               Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  id                 String               @id @default(uuid()) @db.VarChar(36)
+  companyId          String               @map("company_id") @db.VarChar(36)
+  planId             String               @map("plan_id") @db.VarChar(36)
+  provider           String               @default("INTERNAL") @db.VarChar(40)
+  externalId         String?              @map("external_id") @db.VarChar(180)
+  status             SubscriptionStatus   @default(PENDING)
+  currentPeriodStart DateTime?            @map("current_period_start") @db.DateTime(3)
+  currentPeriodEnd   DateTime?            @map("current_period_end") @db.DateTime(3)
+  cancelAt           DateTime?            @map("cancel_at") @db.DateTime(3)
+  cancelledAt        DateTime?            @map("cancelled_at") @db.DateTime(3)
+  createdAt          DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  plan               Plan                 @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments           PaymentTransaction[]
 
   @@index([companyId, status])
   @@index([planId, status])
@@ -1105,4 +1203,148 @@ model OutboxEvent {
   @@index([status, availableAt])
   @@index([aggregateType, aggregateId])
   @@map("outbox_events")
+}
+
+model UserConsent {
+  id         String      @id @default(uuid()) @db.VarChar(36)
+  userId     String      @map("user_id") @db.VarChar(36)
+  type       ConsentType
+  version    String      @db.VarChar(20)
+  acceptedAt DateTime    @default(now()) @map("accepted_at") @db.DateTime(3)
+  ipAddress  String?     @map("ip_address") @db.VarChar(64)
+  createdAt  DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, acceptedAt])
+  @@map("user_consents")
+}
+
+model DataRequest {
+  id          String            @id @default(uuid()) @db.VarChar(36)
+  userId      String            @map("user_id") @db.VarChar(36)
+  type        DataRequestType
+  status      DataRequestStatus
+  notes       String?           @db.VarChar(500)
+  completedAt DateTime?         @map("completed_at") @db.DateTime(3)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@map("data_requests")
+}
+
+model FileObject {
+  id          String          @id @default(uuid()) @db.VarChar(36)
+  ownerUserId String          @map("owner_user_id") @db.VarChar(36)
+  purpose     FilePurpose
+  resourceId  String?         @map("resource_id") @db.VarChar(36)
+  storageKey  String          @unique @map("storage_key") @db.VarChar(255)
+  mimeType    String          @map("mime_type") @db.VarChar(80)
+  sizeBytes   Int             @map("size_bytes")
+  sha256      String          @db.Char(64)
+  accessLevel FileAccessLevel @map("access_level")
+  scanStatus  FileScanStatus  @default(PENDING) @map("scan_status")
+  scanEngine  String?         @map("scan_engine") @db.VarChar(60)
+  scanDetails String?         @map("scan_details") @db.VarChar(255)
+  scannedAt   DateTime?       @map("scanned_at") @db.DateTime(3)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
+  owner       User            @relation("file_owner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+
+  @@index([scanStatus, createdAt])
+  @@index([purpose, resourceId])
+  @@index([ownerUserId, createdAt])
+  @@index([sha256])
+  @@map("files")
+}
+
+model MaterialAttribute {
+  id           String                @id @default(uuid()) @db.VarChar(36)
+  categoryId   String                @map("category_id") @db.VarChar(36)
+  key          String                @db.VarChar(60)
+  label        String                @db.VarChar(120)
+  type         MaterialAttributeType
+  unit         String?               @db.VarChar(20)
+  options      Json?
+  isFilterable Boolean               @default(true) @map("is_filterable")
+  sortOrder    Int                   @default(0) @map("sort_order")
+  createdAt    DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime              @updatedAt @map("updated_at") @db.DateTime(3)
+  category     WasteCategory         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  values       ListingAttribute[]
+
+  @@unique([categoryId, key])
+  @@index([categoryId, sortOrder])
+  @@map("material_attributes")
+}
+
+model ListingAttribute {
+  listingId   String            @map("listing_id") @db.VarChar(36)
+  attributeId String            @map("attribute_id") @db.VarChar(36)
+  valueText   String?           @map("value_text") @db.VarChar(200)
+  valueNumber Decimal?          @map("value_number") @db.Decimal(16, 3)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.DateTime(3)
+  listing     Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  attribute   MaterialAttribute @relation(fields: [attributeId], references: [id], onDelete: Restrict)
+
+  @@id([listingId, attributeId])
+  @@index([attributeId, valueText])
+  @@index([attributeId, valueNumber])
+  @@map("listing_attributes")
+}
+
+model Shipment {
+  id                  String           @id @default(uuid()) @db.VarChar(36)
+  logisticsRequestId  String           @unique @map("logistics_request_id") @db.VarChar(36)
+  quoteId             String           @map("quote_id") @db.VarChar(36)
+  carrierName         String           @map("carrier_name") @db.VarChar(200)
+  trackingCode        String           @unique @map("tracking_code") @db.VarChar(40)
+  status              ShipmentStatus   @default(SCHEDULED)
+  estimatedDeliveryAt DateTime?        @map("estimated_delivery_at") @db.DateTime(3)
+  deliveredAt         DateTime?        @map("delivered_at") @db.DateTime(3)
+  createdAt           DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+  logisticsRequest    LogisticsRequest @relation(fields: [logisticsRequestId], references: [id], onDelete: Restrict)
+  events              ShipmentEvent[]
+
+  @@index([status, createdAt])
+  @@map("shipments")
+}
+
+model ShipmentEvent {
+  id              String         @id @default(uuid()) @db.VarChar(36)
+  shipmentId      String         @map("shipment_id") @db.VarChar(36)
+  status          ShipmentStatus
+  description     String         @db.VarChar(240)
+  location        String?        @db.VarChar(160)
+  createdByUserId String?        @map("created_by_user_id") @db.VarChar(36)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  shipment        Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  createdBy       User?          @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([shipmentId, createdAt])
+  @@index([createdByUserId])
+  @@map("shipment_events")
+}
+
+model ApiKey {
+  id              String    @id @default(uuid()) @db.VarChar(36)
+  companyId       String    @map("company_id") @db.VarChar(36)
+  createdByUserId String    @map("created_by_user_id") @db.VarChar(36)
+  name            String    @db.VarChar(120)
+  prefix          String    @db.VarChar(16)
+  keyHash         String    @unique @map("key_hash") @db.VarChar(128)
+  lastUsedAt      DateTime? @map("last_used_at") @db.DateTime(3)
+  revokedAt       DateTime? @map("revoked_at") @db.DateTime(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  createdBy       User      @relation("api_key_creator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, revokedAt])
+  @@index([createdByUserId])
+  @@map("api_keys")
 }

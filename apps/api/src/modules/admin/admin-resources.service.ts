@@ -51,6 +51,14 @@ export const PLATFORM_SETTINGS: PlatformSettingDefinition[] = [
     defaultValue: 15,
   },
   {
+    key: 'contact_unlock_price',
+    label: 'Preço do desbloqueio avulso (R$)',
+    description:
+      'Valor cobrado para liberar o contato de um anúncio sem cota de plano. Use 0 para liberar sem cobrança.',
+    type: 'number',
+    defaultValue: 29.9,
+  },
+  {
     key: 'support_email',
     label: 'E-mail de suporte',
     description: 'Canal exibido para solicitações de suporte.',
@@ -555,10 +563,10 @@ export class AdminResourcesService {
     if (definition.type === 'number') {
       const numeric =
         typeof value === 'number' ? value : Number(value as string);
-      if (!Number.isFinite(numeric) || numeric < 0 || numeric > 100)
+      const max = definition.key.startsWith('commission_') ? 100 : 10_000;
+      if (!Number.isFinite(numeric) || numeric < 0 || numeric > max)
         throw new BadRequestException('INVALID_SETTING_VALUE');
-      if (definition.key.startsWith('commission_')) return numeric;
-      return numeric;
+      return Math.round(numeric * 100) / 100;
     }
     if (typeof value !== 'string')
       throw new BadRequestException('INVALID_SETTING_VALUE');

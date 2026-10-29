@@ -72,6 +72,9 @@ jobs:
       ADMIN_EMAILS: admin@loopambiental.com
       FIELD_ENCRYPTION_KEY: ci-field-encryption-key
       AUTH_THROTTLE_LIMIT: 1000
+      # E2E accounts are provisioned through the API and log in right away.
+      REQUIRE_EMAIL_VERIFICATION: "false"
+      PAYMENT_PROVIDER: simulated
       STORAGE_ENDPOINT: http://127.0.0.1:9000
       STORAGE_BUCKET: loopambiental-listings
       STORAGE_ACCESS_KEY: loopambiental
@@ -174,7 +177,7 @@ jobs:
           curl -fsS -X POST http://127.0.0.1:3001/api/v1/auth/register \
             -H 'Content-Type: application/json' \
             -H 'Origin: http://127.0.0.1:3000' -H 'X-App-Action: 1' \
-            -d '{"name":"Admin E2E","email":"admin@loopambiental.com","password":"loopambiental"}' >/dev/null
+            -d '{"name":"Admin E2E","email":"admin@loopambiental.com","password":"loopambiental","acceptTerms":true}' >/dev/null
           mysql -h 127.0.0.1 -P 3306 -u loopambiental -ploopambiental_local loopambiental < e2e/support/seed.sql
 
       - name: Run Playwright tests

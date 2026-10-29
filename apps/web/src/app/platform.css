@@ -1,0 +1,438 @@
+/* Components added for the demo platform features (payments, deals,
+   settings, reports, integrations). Built on the tokens from styles.css. */
+:root {
+  --success: #1f6b45;
+  --warning: #8a5a00;
+  --info: #1d4f7a;
+}
+[data-theme='dark'] {
+  --success: #8fce9e;
+  --warning: #f0c060;
+  --info: #9cc7ef;
+  --danger: #f2a39d;
+}
+
+.demo-banner {
+  background: var(--dark);
+  color: #f3f7f2;
+  font-size: 0.85rem;
+  padding: 8px 16px;
+  text-align: center;
+}
+.demo-banner strong {
+  color: var(--green);
+}
+
+.status-badge {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 2px 10px;
+  white-space: nowrap;
+  color: var(--info);
+}
+.status-badge.status-paid,
+.status-badge.status-completed,
+.status-badge.status-delivered,
+.status-badge.status-clean,
+.status-badge.status-active {
+  color: var(--success);
+}
+.status-badge.status-pending,
+.status-badge.status-awaiting_payment,
+.status-badge.status-awaiting_documents,
+.status-badge.status-awaiting_pickup,
+.status-badge.status-scheduled {
+  color: var(--warning);
+}
+.status-badge.status-failed,
+.status-badge.status-cancelled,
+.status-badge.status-disputed,
+.status-badge.status-infected,
+.status-badge.status-error,
+.status-badge.status-revoked {
+  color: var(--danger);
+}
+
+.checkout-page {
+  max-width: 720px;
+}
+.checkout-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+  padding: 24px;
+}
+.checkout-card header {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+.checkout-card header h2 {
+  font-size: 1.2rem;
+  margin: 2px 0 0;
+}
+.checkout-card header small {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.checkout-facts {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin: 0;
+}
+.checkout-facts dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.checkout-facts dd {
+  font-weight: 600;
+  margin: 2px 0 0;
+}
+.checkout-amount {
+  font-size: 1.4rem;
+}
+.checkout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.checkout-actions button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+.checkout-security {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.8rem;
+  gap: 6px;
+  margin: 0;
+}
+
+.compact-kpis .dashboard-kpi {
+  min-height: 0;
+}
+.table-subtext {
+  color: var(--muted);
+  display: block;
+  font-size: 0.78rem;
+}
+.pending-checkout {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.deal-progress {
+  counter-reset: step;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 18px 0;
+  padding: 0;
+}
+.deal-progress li {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 4px 12px;
+}
+.deal-progress li.done {
+  border-color: var(--success);
+  color: var(--success);
+}
+.deal-progress li.current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+.deal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+}
+.deal-links a {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+.plain-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.plain-list li {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+.plain-list li:last-child {
+  border-bottom: 0;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  margin-top: 20px;
+}
+.settings-grid form,
+.stack-form {
+  display: grid;
+  gap: 12px;
+}
+.stack-form label,
+.settings-grid label {
+  display: grid;
+  font-size: 0.9rem;
+  gap: 4px;
+}
+.stack-form input,
+.stack-form select,
+.stack-form textarea,
+.settings-grid input,
+.settings-grid select {
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  padding: 10px 12px;
+}
+.secret-box {
+  background: var(--surface-muted);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  padding: 12px;
+}
+.recovery-codes {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  list-style: none;
+  padding: 0;
+}
+.danger-zone {
+  border-color: var(--danger);
+}
+.danger-button {
+  background: var(--danger);
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 16px;
+}
+.danger-button:disabled {
+  opacity: 0.6;
+}
+
+.report-kpis {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin: 20px 0;
+}
+.report-kpis article {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+}
+.report-kpis span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.report-kpis strong {
+  display: block;
+  font-size: 1.5rem;
+  margin-top: 4px;
+}
+.report-kpis small {
+  color: var(--muted);
+}
+.bar-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bar-list li {
+  display: grid;
+  gap: 4px;
+}
+.bar-list .bar-label {
+  align-items: baseline;
+  display: flex;
+  font-size: 0.88rem;
+  gap: 12px;
+  justify-content: space-between;
+}
+.bar-list .bar-label span,
+.bar-list .bar-label strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+  letter-spacing: normal;
+  line-height: 1.4;
+}
+.bar-list .bar-track {
+  background: var(--surface-muted);
+  border-radius: 999px;
+  display: block;
+  height: 8px;
+  overflow: hidden;
+}
+.bar-list .bar-fill {
+  background: var(--accent);
+  border-radius: 999px;
+  display: block;
+  height: 100%;
+}
+.disclaimer {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.tracking-timeline {
+  border-left: 2px solid var(--line);
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 0 0 14px;
+}
+.tracking-timeline li small {
+  color: var(--muted);
+  display: block;
+}
+
+.attribute-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.attribute-list {
+  display: grid;
+  gap: 6px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 0;
+}
+.attribute-list dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.attribute-list dd {
+  font-weight: 600;
+  margin: 0;
+}
+
+.code-block {
+  background: var(--dark);
+  border-radius: 8px;
+  color: #e9f1ec;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  overflow-x: auto;
+  padding: 14px;
+  white-space: pre;
+}
+
+.live-indicator {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.8rem;
+  gap: 6px;
+}
+.live-indicator::before {
+  background: var(--muted);
+  border-radius: 50%;
+  content: '';
+  height: 8px;
+  width: 8px;
+}
+.live-indicator.online::before {
+  background: var(--success);
+}
+
+.language-switcher {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+.language-switcher select {
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  padding: 4px 6px;
+}
+
+@media (max-width: 720px) {
+  .checkout-card {
+    padding: 18px;
+  }
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .deal-progress li {
+    transition: none;
+  }
+}
+
+.recommendation {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.recommendation-reasons {
+  color: var(--muted);
+  padding: 0 4px;
+}
+.recommendation-reasons li {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.recommendation-reasons li::before {
+  content: '• ';
+  color: var(--accent);
+}
+.tracking {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.attribute-filters label {
+  display: grid;
+  font-size: 0.85rem;
+  gap: 4px;
+}

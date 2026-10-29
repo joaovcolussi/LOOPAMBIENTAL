@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { api, Conversation, Message } from '../lib/api';
+import { useRealtime } from '../hooks/use-realtime';
 
 export function ProposalConversation({ proposalId }: { proposalId: string }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -11,6 +12,17 @@ export function ProposalConversation({ proposalId }: { proposalId: string }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+
+  useRealtime({
+    message: ({ conversationId, message }) => {
+      if (conversationId !== conversation?.id) return;
+      setMessages((current) =>
+        current.some((item) => item.id === message.id)
+          ? current
+          : [...current, message],
+      );
+    },
+  });
 
   useEffect(() => {
     let active = true;
@@ -56,7 +68,11 @@ export function ProposalConversation({ proposalId }: { proposalId: string }) {
     setError('');
     try {
       const result = await api.sendMessage(conversation.id, body);
-      setMessages((current) => [...current, result.message]);
+      setMessages((current) =>
+        current.some((item) => item.id === result.message.id)
+          ? current
+          : [...current, result.message],
+      );
       setBody('');
     } catch {
       setError('Não foi possível enviar a mensagem.');

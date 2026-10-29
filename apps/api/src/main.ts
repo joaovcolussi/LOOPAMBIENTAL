@@ -3,17 +3,38 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { PrismaExceptionFilter } from './common/prisma-exception.filter';
+import {
+  jsonLogger,
+  useJsonLogs,
+} from './infrastructure/observability/json-logger';
+import { MetricsService } from './infrastructure/observability/metrics.service';
+import { requestContextMiddleware } from './infrastructure/observability/request-context.middleware';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    ...(useJsonLogs() ? { logger: jsonLogger } : {}),
+  });
 
   // Behind a reverse proxy in production, trust the first hop so rate limiting
   // and audit logs see the real client IP.
   app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : false);
 
+  app.use(requestContextMiddleware(app.get(MetricsService)));
+
   app.use(
     helmet({
-      contentSecurityPolicy: false,
+      // The API only serves JSON, images and downloads: nothing may execute
+      // scripts or be framed. Images stay embeddable cross-origin by the web.
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+          defaultSrc: ["'none'"],
+          imgSrc: ["'self'", 'data:'],
+          frameAncestors: ["'none'"],
+          baseUri: ["'none'"],
+          formAction: ["'none'"],
+        },
+      },
       crossOriginResourcePolicy: { policy: 'cross-origin' },
       hsts:
         process.env.NODE_ENV === 'production'

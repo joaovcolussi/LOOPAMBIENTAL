@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '../../../../hooks/use-confirm';
 import { FormEvent, useEffect, useState } from 'react';
 import {
   ArrowLeft,
@@ -51,6 +52,7 @@ function formatBytes(bytes: number) {
 }
 
 export default function CompanyDocumentsPage() {
+  const { confirm, dialog } = useConfirm();
   const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState('');
@@ -132,7 +134,13 @@ export default function CompanyDocumentsPage() {
   }
 
   async function remove(documentId: string) {
-    if (!window.confirm('Remover este documento?')) return;
+    const confirmed = await confirm({
+      title: 'Remover documento',
+      description: 'O arquivo será excluído e não poderá ser recuperado.',
+      tone: 'danger',
+      confirmLabel: 'Remover',
+    });
+    if (confirmed === null) return;
     setError('');
     try {
       await api.deleteCompanyDocument(companyId, documentId);
@@ -376,6 +384,7 @@ export default function CompanyDocumentsPage() {
           </div>
         )}
       </section>
+      {dialog}
     </main>
   );
 }

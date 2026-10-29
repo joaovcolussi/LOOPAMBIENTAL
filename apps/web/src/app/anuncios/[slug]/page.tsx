@@ -11,6 +11,7 @@ import {
 import { useParams } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { api, isAuthenticationError, ListingDetail } from '../../../lib/api';
+import { formatAttributeValue } from '../../../components/listing-attribute-fields';
 import { SessionActions } from '../../../components/session-actions';
 import { FavoriteButton } from '../../../components/favorite-button';
 import { CurrencyInput } from '../../../components/currency-input';
@@ -120,11 +121,21 @@ export default function ListingDetailPage() {
     setUnlocking(true);
     setContactError('');
     try {
-      await api.unlockListingContact(listing.id, targetCompany);
+      const result = await api.unlockListingContact(listing.id, targetCompany);
+      if ('paymentRequired' in result && result.payment.checkoutUrl) {
+        // One-time unlocks without plan quota are charged first.
+        window.location.assign(result.payment.checkoutUrl);
+        return;
+      }
       const { listing: refreshed } = await api.listingBySlug(listing.slug);
       setListing(refreshed);
-    } catch {
-      setContactError('Não foi possível desbloquear o contato.');
+    } catch (caught) {
+      setContactError(
+        caught instanceof Error &&
+          caught.message === 'CONTACT_UNLOCK_OWN_LISTING'
+          ? 'Este anúncio pertence à sua empresa.'
+          : 'Não foi possível desbloquear o contato.',
+      );
     } finally {
       setUnlocking(false);
     }
@@ -232,6 +243,19 @@ export default function ListingDetailPage() {
               {listing.description ||
                 'O anunciante ainda não informou detalhes adicionais.'}
             </p>
+            {listing.attributes && listing.attributes.length > 0 && (
+              <section aria-labelledby="attributes-title">
+                <h2 id="attributes-title">Atributos técnicos</h2>
+                <dl className="attribute-list">
+                  {listing.attributes.map((entry) => (
+                    <div key={entry.attribute.id}>
+                      <dt>{entry.attribute.label}</dt>
+                      <dd>{formatAttributeValue(entry)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            )}
             <div className="detail-facts">
               <div>
                 <span>Quantidade</span>
@@ -479,7 +503,9 @@ export default function ListingDetailPage() {
                 </strong>
                 <p>
                   Desbloqueie o contato para ver responsável, e-mail, telefone e
-                  endereço comercial desta empresa.
+                  endereço comercial desta empresa. O desbloqueio usa a cota do
+                  seu plano ou é cobrado de forma avulsa (pagamento simulado no
+                  ambiente de demonstração).
                 </p>
                 {contactError && (
                   <p className="form-error" role="alert">

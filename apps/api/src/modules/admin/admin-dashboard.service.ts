@@ -1,5 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
+
+type DemandRow = {
+  id: string;
+  name: string;
+  listings: bigint | number;
+  proposals: bigint | number | string;
+};
+type ValueRow = {
+  gross: string | number | null;
+  pipeline: string | number | null;
+  accepted: bigint | number | string | null;
+  total: bigint | number;
+};
 
 @Injectable()
 export class AdminDashboardService {
@@ -13,14 +27,12 @@ export class AdminDashboardService {
       listingTypes,
       proposalStatuses,
       dealStatuses,
-      publishedListings,
-      acceptedProposals,
-      pipelineProposals,
+      demandRows,
+      valueRows,
       openModeration,
       verifiedCompanies,
       usersByStatus,
-      totalProposals,
-      activeDeals,
+      commissionSettings,
     ] = await Promise.all([
       this.prisma.user.count({ where: { deletedAt: null } }),
       this.prisma.company.count({ where: { deletedAt: null } }),
@@ -36,22 +48,27 @@ export class AdminDashboardService {
       }),
       this.prisma.proposal.groupBy({ by: ['status'], _count: { _all: true } }),
       this.prisma.deal.groupBy({ by: ['status'], _count: { _all: true } }),
-      this.prisma.listing.findMany({
-        where: { status: 'PUBLISHED', deletedAt: null },
-        select: {
-          category: { select: { id: true, name: true } },
-          type: true,
-          _count: { select: { proposals: true } },
-        },
-      }),
-      this.prisma.proposal.findMany({
-        where: { status: 'ACCEPTED' },
-        select: { quantity: true, unitPrice: true },
-      }),
-      this.prisma.proposal.findMany({
-        where: { status: { in: ['PENDING', 'COUNTERED', 'ACCEPTED'] } },
-        select: { quantity: true, unitPrice: true },
-      }),
+      // Aggregated in the database instead of loading every listing.
+      this.prisma.$queryRaw<DemandRow[]>(Prisma.sql`
+        SELECT c.id AS id, c.name AS name,
+               COUNT(l.id) AS listings,
+               COALESCE(SUM(p.total), 0) AS proposals
+        FROM listings l
+        JOIN waste_categories c ON c.id = l.category_id
+        LEFT JOIN (
+          SELECT listing_id, COUNT(*) AS total FROM proposals GROUP BY listing_id
+        ) p ON p.listing_id = l.id
+        WHERE l.status = 'PUBLISHED' AND l.deleted_at IS NULL
+        GROUP BY c.id, c.name
+      `),
+      this.prisma.$queryRaw<ValueRow[]>(Prisma.sql`
+        SELECT
+          COALESCE(SUM(CASE WHEN status = 'ACCEPTED' THEN quantity * unit_price END), 0) AS gross,
+          COALESCE(SUM(CASE WHEN status IN ('PENDING', 'COUNTERED', 'ACCEPTED') THEN quantity * unit_price END), 0) AS pipeline,
+          SUM(CASE WHEN status = 'ACCEPTED' THEN 1 ELSE 0 END) AS accepted,
+          COUNT(*) AS total
+        FROM proposals
+      `),
       this.prisma.moderationCase.count({
         where: { status: { in: ['OPEN', 'IN_REVIEW'] } },
       }),
@@ -63,36 +80,29 @@ export class AdminDashboardService {
         where: { deletedAt: null },
         _count: { _all: true },
       }),
-      this.prisma.proposal.count(),
-      this.prisma.deal.count({
-        where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+      this.prisma.platformSetting.findMany({
+        where: {
+          key: { in: ['commission_min_percent', 'commission_max_percent'] },
+        },
+        select: { key: true, value: true },
       }),
     ]);
 
-    const grossValue = acceptedProposals.reduce(
-      (total, proposal) =>
-        total + Number(proposal.quantity) * Number(proposal.unitPrice),
-      0,
-    );
-    const pipelineValue = pipelineProposals.reduce(
-      (total, proposal) =>
-        total + Number(proposal.quantity) * Number(proposal.unitPrice),
-      0,
-    );
-    const demandMap = new Map<
-      string,
-      { id: string; listings: number; proposals: number }
-    >();
-    for (const listing of publishedListings) {
-      const current = demandMap.get(listing.category.name) ?? {
-        id: listing.category.id,
-        listings: 0,
-        proposals: 0,
-      };
-      current.listings += 1;
-      current.proposals += listing._count.proposals;
-      demandMap.set(listing.category.name, current);
-    }
+    const values = valueRows[0];
+    const grossValue = Number(values?.gross ?? 0);
+    const pipelineValue = Number(values?.pipeline ?? 0);
+    const acceptedProposals = Number(values?.accepted ?? 0);
+    const totalProposals = Number(values?.total ?? 0);
+    const percent = (key: string, fallback: number) => {
+      const value = commissionSettings.find((item) => item.key === key)?.value;
+      return typeof value === 'number' ? value / 100 : fallback;
+    };
+    const activeDeals = dealStatuses
+      .filter((item) => !['COMPLETED', 'CANCELLED'].includes(item.status))
+      .reduce((total, item) => total + item._count._all, 0);
+    const publishedListings =
+      listingStatuses.find((item) => item.status === 'PUBLISHED')?._count
+        ._all ?? 0;
 
     return {
       generatedAt: new Date().toISOString(),
@@ -102,19 +112,19 @@ export class AdminDashboardService {
         verifiedCompanies,
         totalProposals,
         activeDeals,
-        publishedListings: publishedListings.length,
+        publishedListings,
         acceptedDeals:
           dealStatuses.find((item) => item.status === 'COMPLETED')?._count
             ._all ?? 0,
         openModeration,
         grossTransactionValue: grossValue,
-        estimatedCommissionMin: grossValue * 0.05,
-        estimatedCommissionMax: grossValue * 0.15,
+        estimatedCommissionMin:
+          grossValue * percent('commission_min_percent', 0.05),
+        estimatedCommissionMax:
+          grossValue * percent('commission_max_percent', 0.15),
         pipelineValue,
         conversionRate:
-          totalProposals === 0
-            ? 0
-            : (acceptedProposals.length / totalProposals) * 100,
+          totalProposals === 0 ? 0 : (acceptedProposals / totalProposals) * 100,
       },
       usersByStatus: usersByStatus.map((item) => ({
         status: item.status,
@@ -136,10 +146,12 @@ export class AdminDashboardService {
         status: item.status,
         total: item._count._all,
       })),
-      demandByCategory: [...demandMap.entries()]
-        .map(([category, values]) => ({
-          category,
-          ...values,
+      demandByCategory: demandRows
+        .map((row) => ({
+          category: row.name,
+          id: row.id,
+          listings: Number(row.listings),
+          proposals: Number(row.proposals),
         }))
         .sort((left, right) => right.proposals - left.proposals),
     };

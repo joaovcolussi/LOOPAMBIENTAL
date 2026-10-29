@@ -84,6 +84,52 @@ export const dealNoteLabels: Record<string, string> = {
   DEAL_CREATED: 'Negociação criada',
   CHECKOUT_CREATED: 'Pagamento iniciado',
   PAYMENT_CONFIRMED: 'Pagamento confirmado',
+  DOCUMENTS_REQUESTED: 'Documentos solicitados',
+  DOCUMENTS_CONFIRMED: 'Documentação confirmada',
+  SHIPMENT_CONFIRMED: 'Coleta realizada — em trânsito',
+  DELIVERY_CONFIRMED: 'Entrega confirmada',
+  DEAL_COMPLETED: 'Negociação concluída',
+  DISPUTE_OPENED: 'Disputa aberta',
+  DEAL_CANCELLED: 'Negociação cancelada',
+  DISPUTE_RESOLVED_COMPLETED: 'Disputa resolvida — concluída',
+  DISPUTE_RESOLVED_CANCELLED: 'Disputa resolvida — cancelada',
+};
+
+// Deal notes may carry a free-text reason after the code ("CODE: reason").
+export function dealNoteLabel(note: string | null | undefined) {
+  if (!note) return '';
+  const separator = note.indexOf(':');
+  const code = separator === -1 ? note : note.slice(0, separator);
+  const reason = separator === -1 ? '' : note.slice(separator + 1).trim();
+  const text = dealNoteLabels[code] ?? code;
+  return reason ? `${text} — ${reason}` : text;
+}
+
+export const dealActionLabels: Record<string, string> = {
+  'request-documents': 'Solicitar documentos',
+  'confirm-documents': 'Confirmar documentação',
+  'confirm-shipment': 'Confirmar coleta / envio',
+  'confirm-delivery': 'Confirmar recebimento',
+  complete: 'Concluir negociação',
+  dispute: 'Abrir disputa',
+  cancel: 'Cancelar negociação',
+};
+
+export const dealSideLabels: Record<string, string> = {
+  BUYER: 'Você compra',
+  SELLER: 'Você vende',
+};
+
+export const paymentPurposeLabels: Record<string, string> = {
+  DEAL: 'Negociação',
+  SUBSCRIPTION: 'Assinatura',
+  CONTACT_UNLOCK: 'Desbloqueio de contato',
+};
+
+export const paymentProviderLabels: Record<string, string> = {
+  SIMULATED: 'Pagamento simulado (demonstração)',
+  MERCADO_PAGO: 'Mercado Pago',
+  INTERNAL: 'Interno',
 };
 
 export const paymentStatusLabels: Record<string, string> = {
@@ -189,6 +235,28 @@ export const logisticsRequestStatusLabels: Record<string, string> = {
   IN_TRANSIT: 'Em trânsito',
   COMPLETED: 'Concluída',
   CANCELLED: 'Cancelada',
+};
+
+export const shipmentStatusLabels: Record<string, string> = {
+  SCHEDULED: 'Coleta agendada',
+  PICKED_UP: 'Coletado',
+  IN_TRANSIT: 'Em trânsito',
+  DELIVERED: 'Entregue',
+  CANCELLED: 'Cancelado',
+};
+
+export const fileScanStatusLabels: Record<string, string> = {
+  PENDING: 'Aguardando varredura',
+  CLEAN: 'Limpo',
+  INFECTED: 'Bloqueado (ameaça)',
+  ERROR: 'Erro na varredura',
+};
+
+export const filePurposeLabels: Record<string, string> = {
+  LISTING_MEDIA: 'Foto de anúncio',
+  LISTING_DOCUMENT: 'Laudo de anúncio',
+  COMPANY_DOCUMENT: 'Documento de empresa',
+  CAROUSEL: 'Carrossel da home',
 };
 
 export const logisticsQuoteStatusLabels: Record<string, string> = {

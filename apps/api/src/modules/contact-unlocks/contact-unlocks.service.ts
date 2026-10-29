@@ -2,16 +2,22 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { PaymentsService } from '../payments/payments.service';
+
+export const CONTACT_UNLOCK_PRICE_SETTING = 'contact_unlock_price';
+export const DEFAULT_CONTACT_UNLOCK_PRICE = 29.9;
 
 @Injectable()
 export class ContactUnlocksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly subscriptions: SubscriptionsService,
+    @Optional() private readonly payments?: PaymentsService,
   ) {}
 
   async unlock(
@@ -23,9 +29,11 @@ export class ContactUnlocksService {
     await this.assertMember(userId, companyId);
     const listing = await this.prisma.listing.findFirst({
       where: { id: listingId, status: 'PUBLISHED', deletedAt: null },
-      select: { id: true },
+      select: { id: true, title: true, companyId: true },
     });
     if (!listing) throw new NotFoundException('LISTING_NOT_FOUND');
+    if (listing.companyId === companyId)
+      throw new ForbiddenException('CONTACT_UNLOCK_OWN_LISTING');
 
     const existing = await this.prisma.contactUnlock.findUnique({
       where: { companyId_listingId: { companyId, listingId } },
@@ -33,6 +41,22 @@ export class ContactUnlocksService {
     if (existing) return existing;
 
     const source = await this.resolveSource(companyId);
+    if (source === 'ONE_TIME' && this.payments) {
+      // Without plan quota the unlock is a one-time purchase: it only becomes
+      // effective after the payment settles (see PaymentsService.settle).
+      const price = await this.oneTimePrice();
+      if (price.gt(0)) {
+        const payment = await this.payments.createCharge({
+          purpose: 'CONTACT_UNLOCK',
+          userId,
+          companyId,
+          listingId,
+          amount: price.toFixed(2),
+          title: `Desbloqueio de contato: ${listing.title}`.slice(0, 180),
+        });
+        return { paymentRequired: true, payment };
+      }
+    }
     try {
       return await this.prisma.$transaction(async (transaction) => {
         const created = await transaction.contactUnlock.create({
@@ -96,6 +120,18 @@ export class ContactUnlocksService {
         },
       },
     });
+  }
+
+  async oneTimePrice() {
+    const setting = await this.prisma.platformSetting.findUnique({
+      where: { key: CONTACT_UNLOCK_PRICE_SETTING },
+      select: { value: true },
+    });
+    const value =
+      typeof setting?.value === 'number'
+        ? setting.value
+        : DEFAULT_CONTACT_UNLOCK_PRICE;
+    return new Prisma.Decimal(value);
   }
 
   private async resolveSource(companyId: string): Promise<'PLAN' | 'ONE_TIME'> {

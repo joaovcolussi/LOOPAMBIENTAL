@@ -5,12 +5,21 @@ import { ArrowLeft, Bell, Check, Recycle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api, Notification } from '../../../lib/api';
 import { SessionActions } from '../../../components/session-actions';
+import { useRealtime } from '../../../hooks/use-realtime';
 
 export default function NotificationsPage() {
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  useRealtime({
+    notification: (notification) =>
+      setNotifications((current) =>
+        current.some((item) => item.id === notification.id)
+          ? current
+          : [notification, ...current],
+      ),
+  });
   useEffect(() => {
     api
       .notifications()

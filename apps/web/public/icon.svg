@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LOOP AMBIENTAL">
+  <rect width="512" height="512" rx="112" fill="#102b2b"/>
+  <g fill="none" stroke="#d6e85a" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 112a144 144 0 0 1 124.7 72"/>
+    <path d="M380.7 328A144 144 0 0 1 256 400"/>
+    <path d="M131.3 328A144 144 0 0 1 131.3 184"/>
+  </g>
+  <g fill="#d6e85a">
+    <path d="M392 150l14 64-62-20z"/>
+    <path d="M232 418l-50-42 62-22z"/>
+    <path d="M104 160l58-28-6 64z"/>
+  </g>
+  <circle cx="256" cy="256" r="46" fill="#8fce9e"/>
+</svg>

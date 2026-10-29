@@ -1,0 +1,61 @@
+{
+  "demo": {
+    "title": "Demo environment.",
+    "body": "Fictitious data and simulated payments — no real charge is ever made."
+  },
+  "language": {
+    "label": "Language",
+    "hint": "Translation covers the main public pages; other screens remain in Portuguese."
+  },
+  "dashboardHeader": {
+    "back": "Back to dashboard"
+  },
+  "nav": {
+    "howItWorks": "How it works",
+    "listings": "Listings",
+    "plans": "Plans",
+    "forCompanies": "For companies",
+    "developers": "API"
+  },
+  "home": {
+    "eyebrow": "B2B marketplace for industrial waste",
+    "title": "One industry's waste can be another's strategic input.",
+    "lede": "Connect waste generators with buyers of waste and by-products, cut disposal costs and create value for the supply chain.",
+    "explore": "Explore opportunities",
+    "advertise": "I want to list",
+    "trust": "Verified companies and operations",
+    "statsPublished": "published listings",
+    "statsBuy": "buy requests",
+    "statsSell": "sell offers",
+    "statsVerified": "verified companies",
+    "pulseEyebrow": "supply chain pulse",
+    "pulseTitle": "Where industry is finding value.",
+    "pulseBody": "Published listings by category across the LOOP AMBIENTAL network.",
+    "pulseLink": "See active opportunities",
+    "pulseChart": "listings by category",
+    "pulseAria": "Activity by category",
+    "pulseEmpty": "No data yet.",
+    "problemsEyebrow": "impact that starts in operations",
+    "problemsTitle": "Environmental problems LOOP helps solve.",
+    "problem1Title": "Unnecessary transport and disposal",
+    "problem1Body": "We bring supply and demand together to reduce trips with no commercial destination and disposal costs.",
+    "problem2Title": "Waste treated as loss",
+    "problem2Body": "We give visibility to materials that can return to production as raw material or by-product.",
+    "problem3Title": "Poor environmental traceability",
+    "problem3Body": "We organize companies, proposals and operational data to support more responsible, circular decisions.",
+    "recentEyebrow": "recent opportunities",
+    "recentTitle": "Waste with commercial value",
+    "recentAll": "See all opportunities",
+    "searchAria": "Search by material, category or city",
+    "searchPlaceholder": "Search for waste, by-product or city",
+    "searchButton": "Search",
+    "empty": "No published listings yet.",
+    "closingEyebrow": "built for the real market",
+    "closingLine1": "Less disposal.",
+    "closingLine2": "More value.",
+    "start": "Get started",
+    "footerTerms": "Terms",
+    "footerPrivacy": "Privacy",
+    "footerTagline": "A circular market for better business."
+  }
+}

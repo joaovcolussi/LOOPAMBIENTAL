@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '../../../hooks/use-confirm';
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Bookmark, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -22,6 +23,7 @@ function filterSummary(search: SavedSearch) {
 }
 
 export default function SavedSearchesPage() {
+  const { confirm, dialog } = useConfirm();
   const router = useRouter();
   const [searches, setSearches] = useState<SavedSearch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +59,13 @@ export default function SavedSearchesPage() {
   }
 
   async function remove(id: string) {
-    if (!window.confirm('Remover esta busca salva?')) return;
+    const confirmed = await confirm({
+      title: 'Remover busca salva',
+      description: 'Você deixará de receber alertas desta busca.',
+      tone: 'danger',
+      confirmLabel: 'Remover',
+    });
+    if (confirmed === null) return;
     try {
       await api.deleteSavedSearch(id);
       await load();
@@ -183,6 +191,7 @@ export default function SavedSearchesPage() {
           </div>
         )}
       </section>
+      {dialog}
     </main>
   );
 }

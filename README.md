@@ -38,7 +38,32 @@ para os containers (os dados ficam salvos).
 > No Windows, se `corepack enable` pedir permissão, abra o terminal como
 > administrador só para esse comando.
 
-### 3. Tornar-se administrador
+### 3. Usar as contas de demonstração
+
+Este projeto roda como **ambiente de estudo/demonstração**: o `pnpm start`
+carrega dados fictícios (empresas, anúncios, propostas, negociações, fretes e
+pagamentos) e todos os pagamentos são **simulados** — nenhuma cobrança real é
+feita. Senha de todas as contas: `Demo@12345`.
+
+| Conta                          | Perfil                                     |
+| ------------------------------ | ------------------------------------------ |
+| `admin@loopambiental.demo`     | Administrador da plataforma                |
+| `moderacao@loopambiental.demo` | Moderador                                  |
+| `ana@reciclasul.demo`          | Recicla Sul Metais (verificada, plano Pro) |
+| `bruno@polimerosverdes.demo`   | Polímeros Verdes (compra plástico)         |
+| `carla@papelcircular.demo`     | Papel Circular (verificação em análise)    |
+| `diego@horizonte.demo`         | Construtora Horizonte (não verificada)     |
+
+Para recarregar só os dados: `corepack pnpm db:demo` (idempotente). Para não
+carregá-los no `start`, defina `DEMO_SEED=false`.
+
+Fluxo completo para testar: proposta → aceite → **Negociações** → _Pagar_ →
+checkout simulado (_Aprovar pagamento_) → **Logística** → _Gerar cotações
+simuladas_ → _Contratar_ → _Simular próximo evento de rastreio_ → negociação
+entregue → _Concluir_ → avaliação. Assinaturas pagas e desbloqueio avulso de
+contato também passam pelo checkout simulado.
+
+### 4. Tornar-se administrador (conta própria)
 
 O e-mail `admin@loopambiental.com` já está em `ADMIN_EMAILS` no `.env`. Cadastre
 esse e-mail (ou troque a variável pelo seu), confirme o e-mail no Mailpit
@@ -53,6 +78,7 @@ esse e-mail (ou troque a variável pelo seu), confirme o e-mail no Mailpit
 | `corepack pnpm start:infra` | Sobe só MySQL, Redis, MinIO e Mailpit        |
 | `corepack pnpm dev`         | Inicia só os apps (infra já rodando)         |
 | `corepack pnpm db:migrate`  | Aplica migrações novas                       |
+| `corepack pnpm db:demo`     | Carrega dados fictícios de demonstração      |
 | `corepack pnpm test`        | Testes unitários (API e Web)                 |
 | `corepack pnpm lint`        | Verifica formatação                          |
 | `corepack pnpm typecheck`   | Verifica tipos                               |
@@ -61,13 +87,15 @@ esse e-mail (ou troque a variável pelo seu), confirme o e-mail no Mailpit
 
 ## Endereços
 
-| Serviço          | Endereço                            |
-| ---------------- | ----------------------------------- |
-| Site             | http://localhost:3000               |
-| API              | http://localhost:3001/api/v1        |
-| Saúde da API     | http://localhost:3001/api/v1/health |
-| E-mails (dev)    | http://localhost:8025               |
-| MinIO (arquivos) | http://localhost:9001               |
+| Serviço          | Endereço                              |
+| ---------------- | ------------------------------------- |
+| Site             | http://localhost:3000                 |
+| API              | http://localhost:3001/api/v1          |
+| Saúde da API     | http://localhost:3001/api/v1/health   |
+| Métricas         | http://localhost:3001/api/v1/metrics  |
+| Docs da API      | http://localhost:3000/desenvolvedores |
+| E-mails (dev)    | http://localhost:8025                 |
+| MinIO (arquivos) | http://localhost:9001                 |
 
 ## Problemas comuns
 
@@ -90,9 +118,20 @@ Para ver as portas em uso: `Get-NetTCPConnection -LocalPort 3000,3001,3306`
 - Anúncios de **compra** e **venda** com fotos e **laudos técnicos**.
 - Busca com texto, filtros, distância, favoritos e buscas salvas.
 - Propostas, contrapropostas, negociações e chat.
-- Moderação, denúncias, notificações, avaliações, planos e pagamentos
-  (Mercado Pago).
-- Painel administrativo com indicadores e auditoria.
+- Moderação, denúncias, notificações em **tempo real** (SSE), avaliações.
+- Planos, assinaturas e desbloqueio de contato cobrados por pagamento
+  (simulado na demo; Mercado Pago via `PAYMENT_PROVIDER=mercadopago`).
+- Negociações com máquina de estados (documentos, pagamento, coleta, entrega,
+  conclusão, disputa) e logística com cotações, remessas e rastreio.
+- Atributos técnicos por categoria (pureza, polímero, umidade...) com filtros.
+- Relatórios comerciais e ambientais (CO₂e estimado) com exportação CSV.
+- Recomendações de ofertas, chaves de API e importação/exportação CSV para ERP.
+- MFA (TOTP), verificação de e-mail obrigatória, sessões, exportação e
+  exclusão de dados (LGPD), aceite versionado de termos.
+- Observabilidade (logs JSON, `requestId`, `traceparent`, métricas
+  Prometheus), CSP e varredura de uploads (assinaturas, inclui EICAR).
+- App instalável (PWA) e seletor de idioma (pt-BR, en, es nas páginas públicas).
+- Painel administrativo com indicadores, disputas, logística, LGPD e auditoria.
 
 ### Laudos nos anúncios
 
@@ -137,6 +176,9 @@ de arquitetura e de contribuição: `AGENTS.md`.
 
 ## Antes de ir para produção
 
-- Cadastrar os planos reais (hoje não há planos no banco).
-- Credenciais do Mercado Pago (`MP_*`) e `API_PUBLIC_URL` pública.
-- MFA para administradores, antivírus para uploads, backups e revisão LGPD.
+- Desligar a demonstração: `DEMO_MODE=false`, `DEMO_SEED=false`,
+  `NEXT_PUBLIC_DEMO_MODE=false` e cadastrar os planos reais.
+- `PAYMENT_PROVIDER=mercadopago` com credenciais `MP_*` e `API_PUBLIC_URL` pública.
+- `REQUIRE_ADMIN_MFA=true`, `METRICS_TOKEN`, antivírus real no adapter de
+  varredura, Redis pub/sub para o tempo real com várias instâncias, backups e
+  revisão jurídica de termos/privacidade.

@@ -15,6 +15,8 @@ export default function ListingsDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [createdMessage, setCreatedMessage] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     setCreatedMessage(
@@ -27,8 +29,10 @@ export default function ListingsDashboardPage() {
         setUser(result.user);
         return api.myListings();
       })
-      .then(({ listings: result }) => {
-        if (active) setListings(result);
+      .then(({ listings: result, pagination }) => {
+        if (!active) return;
+        setListings(result);
+        setNextCursor(pagination.nextCursor);
       })
       .catch(() => router.replace('/entrar'))
       .finally(() => {
@@ -38,6 +42,20 @@ export default function ListingsDashboardPage() {
       active = false;
     };
   }, [router]);
+
+  async function loadMore() {
+    if (!nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const { listings: result, pagination } = await api.myListings(nextCursor);
+      setListings((current) => [...current, ...result]);
+      setNextCursor(pagination.nextCursor);
+    } catch {
+      setError('Não foi possível carregar mais anúncios.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   if (loading)
     return (
@@ -98,6 +116,16 @@ export default function ListingsDashboardPage() {
               </div>
             ))}
           </div>
+        )}
+        {nextCursor && (
+          <button
+            className="secondary-button admin-load-more"
+            type="button"
+            disabled={loadingMore}
+            onClick={loadMore}
+          >
+            {loadingMore ? 'Carregando...' : 'Carregar mais anúncios'}
+          </button>
         )}
       </section>
     </main>

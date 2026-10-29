@@ -61,7 +61,10 @@ export class HomeCarouselService {
     if ((existing?.version ?? 0) !== expectedVersion)
       throw new ConflictException('CAROUSEL_SLIDE_CONFLICT');
 
-    const upload = await this.storage.uploadCarousel(file);
+    const upload = await this.storage.uploadCarousel(file, {
+      ownerUserId: actorUserId,
+      purpose: 'CAROUSEL',
+    });
     try {
       const slide = await this.prisma.$transaction(async (transaction) => {
         if (existing) {

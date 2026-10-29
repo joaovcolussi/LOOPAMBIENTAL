@@ -3,9 +3,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/prisma.service';
+import { RealtimeService } from '../../infrastructure/realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
+
+const MESSAGE_PAGE_SIZE = 100;
 
 // Participant rows alone are not enough: a user removed from the company must
 // lose access to its negotiation threads, so current membership in either side
@@ -24,6 +28,7 @@ export class ConversationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   async createForProposal(
@@ -126,6 +131,7 @@ export class ConversationsService {
         ...currentMemberOfEitherSide(userId),
       },
       orderBy: { updatedAt: 'desc' },
+      take: 100,
       select: {
         id: true,
         updatedAt: true,
@@ -164,12 +170,32 @@ export class ConversationsService {
     );
   }
 
-  async messages(userId: string, conversationId: string): Promise<unknown> {
+  // Returns the most recent page in chronological order; `before` loads the
+  // page that precedes a given message.
+  async messages(
+    userId: string,
+    conversationId: string,
+    before?: string,
+  ): Promise<unknown> {
     await this.assertParticipant(userId, conversationId);
-    return this.prisma.message.findMany({
-      where: { conversationId, deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-      take: 100,
+    let cursorWhere = {};
+    if (before) {
+      const anchor = await this.prisma.message.findFirst({
+        where: { id: before, conversationId },
+        select: { id: true, createdAt: true },
+      });
+      if (!anchor) throw new BadRequestException('INVALID_CURSOR');
+      cursorWhere = {
+        OR: [
+          { createdAt: { lt: anchor.createdAt } },
+          { createdAt: anchor.createdAt, id: { lt: anchor.id } },
+        ],
+      };
+    }
+    const page = await this.prisma.message.findMany({
+      where: { conversationId, deletedAt: null, ...cursorWhere },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: MESSAGE_PAGE_SIZE,
       select: {
         id: true,
         body: true,
@@ -178,6 +204,7 @@ export class ConversationsService {
         sender: { select: { id: true, name: true } },
       },
     });
+    return page.reverse();
   }
 
   async send(
@@ -207,6 +234,11 @@ export class ConversationsService {
       where: { conversationId, userId: { not: userId } },
       select: { userId: true },
     });
+    for (const participantId of [userId, ...recipients.map((r) => r.userId)])
+      this.realtime?.publish(participantId, {
+        type: 'message',
+        data: { conversationId, message },
+      });
     await Promise.all(
       recipients.map((recipient) =>
         this.notifications.create(recipient.userId, {
