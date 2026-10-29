@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '../../../hooks/use-confirm';
 import { ArrowLeft, ImagePlus, Recycle, RotateCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { SessionActions } from '../../../components/session-actions';
@@ -118,6 +119,7 @@ function CarouselSlotEditor({
   const [altText, setAltText] = useState(slide?.altText ?? fallback.alt);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const { confirm, dialog } = useConfirm();
 
   useEffect(() => {
     setAltText(slide?.altText ?? fallback.alt);
@@ -159,8 +161,13 @@ function CarouselSlotEditor({
   }
 
   async function reset() {
-    if (!slide || !window.confirm('Restaurar a imagem padrão desta posição?'))
-      return;
+    if (!slide) return;
+    const confirmed = await confirm({
+      title: 'Restaurar imagem padrão',
+      description: 'A imagem personalizada desta posição será removida.',
+      confirmLabel: 'Restaurar',
+    });
+    if (confirmed === null) return;
     setSaving(true);
     setMessage('');
     try {
@@ -232,6 +239,7 @@ function CarouselSlotEditor({
           )}
         </div>
       </div>
+      {dialog}
     </article>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '../../../hooks/use-confirm';
 import { useEffect, useState } from 'react';
 import { Check, FileText, Recycle, ShieldCheck, X } from 'lucide-react';
 import {
@@ -19,6 +20,7 @@ const documentTypeLabels: Record<string, string> = {
 };
 
 export default function AdminVerificationsPage() {
+  const { confirm, dialog } = useConfirm();
   const [verifications, setVerifications] = useState<
     AdminCompanyVerification[]
   >([]);
@@ -52,7 +54,14 @@ export default function AdminVerificationsPage() {
   }
 
   async function reject(item: AdminCompanyVerification) {
-    const reason = window.prompt('Informe o motivo da recusa:');
+    const reason = await confirm({
+      title: 'Recusar verificação',
+      description: `Informe o motivo da recusa de ${item.company.tradeName || item.company.legalName}. A empresa será notificada.`,
+      requireReason: true,
+      reasonLabel: 'Motivo da recusa',
+      tone: 'danger',
+      confirmLabel: 'Recusar',
+    });
     if (!reason) return;
     setActingId(item.id);
     setError('');
@@ -183,6 +192,7 @@ export default function AdminVerificationsPage() {
           )}
         </div>
       </section>
+      {dialog}
     </main>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '../../../hooks/use-confirm';
 import { useEffect, useState } from 'react';
 import { Check, Flag, Recycle, X } from 'lucide-react';
 import { api, Report } from '../../../lib/api';
@@ -34,6 +35,7 @@ function targetSummary(report: Report) {
 }
 
 export default function AdminReportsPage() {
+  const { confirm, dialog } = useConfirm();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -50,18 +52,29 @@ export default function AdminReportsPage() {
   }, []);
 
   async function resolve(item: Report, status: 'RESOLVED' | 'DISMISSED') {
-    const notes = window.prompt(
+    const notes = await confirm(
       status === 'RESOLVED'
-        ? 'Descreva a resolução:'
-        : 'Motivo para arquivar (opcional):',
+        ? {
+            title: 'Resolver denúncia',
+            description: 'Descreva a resolução aplicada.',
+            requireReason: true,
+            reasonLabel: 'Resolução',
+            confirmLabel: 'Resolver',
+          }
+        : {
+            title: 'Arquivar denúncia',
+            description: 'Informe o motivo (opcional).',
+            reasonLabel: 'Motivo',
+            confirmLabel: 'Arquivar',
+          },
     );
-    if (status === 'RESOLVED' && !notes) return;
+    if (notes === null) return;
     setActingId(item.id);
     setError('');
     try {
       await api.resolveReport(item.id, {
         status,
-        notes: notes ?? undefined,
+        notes: notes || undefined,
       });
       setReports((current) => current.filter((r) => r.id !== item.id));
     } catch {
@@ -144,6 +157,7 @@ export default function AdminReportsPage() {
           )}
         </div>
       </section>
+      {dialog}
     </main>
   );
 }

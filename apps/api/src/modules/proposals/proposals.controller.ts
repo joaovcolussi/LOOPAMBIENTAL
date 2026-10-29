@@ -5,10 +5,12 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { parsePageRequest } from '../../common/cursor-page';
 import { ProposalsService } from './proposals.service';
 import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 
@@ -26,9 +28,18 @@ type ProposalBody = {
 export class ProposalsController {
   constructor(private readonly proposalsService: ProposalsService) {}
   @Get()
-  async list(@Req() request: AuthenticatedRequest): Promise<unknown> {
+  async list(
+    @Req() request: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
+    @Query('pageSize') pageSize?: string,
+  ): Promise<unknown> {
+    const page = await this.proposalsService.listForUser(
+      request.user.id,
+      parsePageRequest(cursor, pageSize),
+    );
     return {
-      proposals: await this.proposalsService.listForUser(request.user.id),
+      proposals: page.items,
+      pagination: page.pagination,
     };
   }
   @Post()

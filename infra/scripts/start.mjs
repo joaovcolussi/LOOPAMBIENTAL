@@ -5,6 +5,7 @@
 //   corepack pnpm start        # infraestrutura + migrações + API/Web/Worker
 //   corepack pnpm start infra  # apenas MySQL, Redis, MinIO e Mailpit
 //   corepack pnpm start db     # apenas migrações do banco
+//   corepack pnpm start demo   # migrações + dados fictícios de demonstração
 //   corepack pnpm start stop   # para os containers (mantém volumes)
 //   corepack pnpm start down   # remove os containers (mantém volumes)
 //
@@ -162,6 +163,14 @@ function migrate() {
   pnpm(['--filter', '@loopambiental/database', 'db:deploy']);
 }
 
+// O ambiente é de estudo/demonstração: popula dados fictícios (idempotente),
+// a menos que DEMO_SEED=false.
+function seedDemo() {
+  if (process.env.DEMO_SEED === 'false') return;
+  log('Carregando dados de demonstração (pnpm db:demo)...');
+  pnpm(['--filter', '@loopambiental/database', 'db:demo']);
+}
+
 function startInfra(compose) {
   log(
     `Subindo infraestrutura (${compose.join(' ')}: mysql redis minio mailpit)`,
@@ -186,6 +195,7 @@ async function start() {
   startInfra(compose);
   await waitForMysql(compose);
   migrate();
+  seedDemo();
   log('Iniciando API, Web e Worker com hot reload (Ctrl+C para parar)...');
   const child = spawn('corepack', ['pnpm', 'dev'], {
     stdio: 'inherit',
@@ -231,6 +241,10 @@ switch (command) {
   case 'migrate':
     await database();
     break;
+  case 'demo':
+    await database();
+    seedDemo();
+    break;
   case 'stop':
     containers('stop');
     break;
@@ -239,6 +253,6 @@ switch (command) {
     break;
   default:
     fail(
-      `Comando desconhecido "${command}". Use: start | infra | db | stop | down.`,
+      `Comando desconhecido "${command}". Use: start | infra | db | demo | stop | down.`,
     );
 }

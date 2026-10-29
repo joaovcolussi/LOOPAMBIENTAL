@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '../../hooks/use-confirm';
 import {
   BarChart3,
   Building2,
@@ -54,6 +55,7 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function AdminDashboardPage() {
+  const { confirm, dialog } = useConfirm();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [error, setError] = useState('');
@@ -84,8 +86,12 @@ export default function AdminDashboardPage() {
         : platformRole === 'MODERATOR'
           ? 'moderador'
           : 'usuário';
-    if (!window.confirm(`Conceder acesso de ${roleLabel} para ${user.email}?`))
-      return;
+    const confirmed = await confirm({
+      title: 'Alterar acesso',
+      description: `Conceder acesso de ${roleLabel} para ${user.email}?`,
+      confirmLabel: 'Conceder',
+    });
+    if (confirmed === null) return;
     setUserError('');
     setSavingUserId(user.id);
     try {
@@ -522,6 +528,7 @@ export default function AdminDashboardPage() {
           ainda dependem da integração financeira.
         </p>
       </section>
+      {dialog}
     </main>
   );
 }

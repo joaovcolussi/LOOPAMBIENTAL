@@ -10,6 +10,12 @@ import type { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { ListingMediaStorageService } from '../../infrastructure/listing-media-storage.service';
 import {
+  cursorArgs,
+  PagedResult,
+  PageRequest,
+  toPage,
+} from '../../common/cursor-page';
+import {
   AttributeValueInput,
   listingAttributeSelect,
   normalizeAttributes,
@@ -170,18 +176,24 @@ export class ListingsService {
     private readonly mediaStorage: ListingMediaStorageService,
   ) {}
 
-  async findForUser(userId: string): Promise<unknown> {
+  async findForUser(
+    userId: string,
+    page?: PageRequest,
+  ): Promise<PagedResult<unknown>> {
+    const { pageSize, args } = cursorArgs(page);
     const memberships = await this.prisma.companyMember.findMany({
       where: { userId },
       select: { companyId: true },
     });
     const companyIds = memberships.map((m) => m.companyId);
-    if (companyIds.length === 0) return [];
-    return this.prisma.listing.findMany({
+    if (companyIds.length === 0) return toPage([], pageSize);
+    const rows = await this.prisma.listing.findMany({
       where: { companyId: { in: companyIds }, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: listingSelect,
+      ...args,
     });
+    return toPage(rows, pageSize);
   }
 
   async findForUserById(userId: string, id: string): Promise<unknown> {

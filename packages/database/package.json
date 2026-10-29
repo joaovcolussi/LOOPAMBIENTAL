@@ -12,7 +12,8 @@
     "db:deploy": "tsx --env-file=../../.env node_modules/prisma/build/index.js migrate deploy",
     "db:status": "tsx --env-file=../../.env node_modules/prisma/build/index.js migrate status",
     "db:validate": "tsx --env-file=../../.env node_modules/prisma/build/index.js validate",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:demo": "tsx --env-file=../../.env src/demo-seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1"

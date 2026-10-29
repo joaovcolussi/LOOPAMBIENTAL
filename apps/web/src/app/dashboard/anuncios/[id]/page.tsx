@@ -1,5 +1,6 @@
 'use client';
 
+import { useConfirm } from '../../../../hooks/use-confirm';
 import { ArrowLeft, Recycle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
@@ -27,6 +28,7 @@ import {
 type OwnedListing = ListingDetail & { status: string };
 
 export default function OwnedListingPage() {
+  const { confirm, dialog } = useConfirm();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [listing, setListing] = useState<OwnedListing | null>(null);
@@ -96,7 +98,13 @@ export default function OwnedListingPage() {
   }
 
   async function removeDocument(document: ListingDocument) {
-    if (!window.confirm(`Remover o laudo "${document.fileName}"?`)) return;
+    const confirmed = await confirm({
+      title: 'Remover laudo',
+      description: `Remover o laudo "${document.fileName}"? Anúncios publicados voltam para análise.`,
+      tone: 'danger',
+      confirmLabel: 'Remover',
+    });
+    if (confirmed === null) return;
     setRemovingId(document.id);
     setMessage('');
     try {
@@ -300,6 +308,7 @@ export default function OwnedListingPage() {
           </section>
         )}
       </section>
+      {dialog}
     </main>
   );
 }

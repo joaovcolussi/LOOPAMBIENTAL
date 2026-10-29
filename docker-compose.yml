@@ -62,6 +62,11 @@ services:
       SMTP_FROM: LOOP AMBIENTAL <no-reply@loopambiental.com>
       ADMIN_EMAILS: ${ADMIN_EMAILS:-admin@loopambiental.com}
       FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-configure-a-strong-secret-in-production}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-simulated}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
+      REQUIRE_ADMIN_MFA: ${REQUIRE_ADMIN_MFA:-false}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
       MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
       MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
       MP_API_URL: ${MP_API_URL:-https://api.mercadopago.com}

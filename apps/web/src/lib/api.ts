@@ -1290,7 +1290,10 @@ export const api = {
     request<{ attributes: MaterialAttribute[] }>(
       `/categories/${categoryId}/attributes`,
     ),
-  myListings: () => request<{ listings: ListingCard[] }>('/listings/mine'),
+  myListings: (cursor?: string) =>
+    request<{ listings: ListingCard[]; pagination: CursorPagination }>(
+      `/listings/mine${adminQuery({ pageSize: 100, cursor })}`,
+    ),
   uploadListingPhotos: (id: string, photos: File[]) => {
     const body = new FormData();
     photos.forEach((photo) => body.append('photos', photo));
@@ -1344,7 +1347,10 @@ export const api = {
       `/listings/${id}/favorite`,
       { method: 'DELETE' },
     ),
-  proposals: () => request<{ proposals: Proposal[] }>('/proposals'),
+  proposals: (cursor?: string) =>
+    request<{ proposals: Proposal[]; pagination: CursorPagination }>(
+      `/proposals${adminQuery({ pageSize: 100, cursor })}`,
+    ),
   proposal: (id: string) => request<{ proposal: Proposal }>(`/proposals/${id}`),
   createProposal: (input: {
     listingId: string;

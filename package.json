@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "db:generate": "corepack pnpm --filter @loopambiental/database generate",
     "db:migrate": "corepack pnpm --filter @loopambiental/database db:deploy",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "db:demo": "corepack pnpm --filter @loopambiental/database db:demo"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

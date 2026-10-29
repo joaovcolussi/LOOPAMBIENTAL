@@ -131,6 +131,7 @@ export class ConversationsService {
         ...currentMemberOfEitherSide(userId),
       },
       orderBy: { updatedAt: 'desc' },
+      take: 100,
       select: {
         id: true,
         updatedAt: true,

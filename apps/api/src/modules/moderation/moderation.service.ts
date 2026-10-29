@@ -14,10 +14,12 @@ import {
 export class ModerationService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Oldest first (FIFO queue), bounded so the admin screen stays fast.
   async listCases(): Promise<unknown> {
     return this.prisma.moderationCase.findMany({
       where: { status: { in: ['OPEN', 'IN_REVIEW'] } },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: 100,
       include: {
         listing: {
           select: {

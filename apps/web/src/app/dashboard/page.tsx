@@ -63,6 +63,8 @@ const verificationLabels: Record<string, string> = {
   REJECTED: 'Verificação rejeitada',
 };
 
+const emptyPage = { pageSize: 0, hasMore: false, nextCursor: null };
+
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -98,8 +100,14 @@ export default function DashboardPage() {
           conversationResult,
         ] = await Promise.all([
           safe(api.companies(), { companies: [] as Company[] }),
-          safe(api.myListings(), { listings: [] as ListingCard[] }),
-          safe(api.proposals(), { proposals: [] as Proposal[] }),
+          safe(api.myListings(), {
+            listings: [] as ListingCard[],
+            pagination: emptyPage,
+          }),
+          safe(api.proposals(), {
+            proposals: [] as Proposal[],
+            pagination: emptyPage,
+          }),
           safe(api.notifications(), {
             notifications: [] as Notification[],
           }),

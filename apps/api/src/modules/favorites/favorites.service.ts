@@ -27,6 +27,7 @@ export class FavoritesService {
     return this.prisma.favorite.findMany({
       where: { userId, listing: { deletedAt: null } },
       orderBy: { createdAt: 'desc' },
+      take: 200,
       select: {
         createdAt: true,
         listing: {
