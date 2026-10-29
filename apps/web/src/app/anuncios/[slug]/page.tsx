@@ -11,6 +11,7 @@ import {
 import { useParams } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { api, isAuthenticationError, ListingDetail } from '../../../lib/api';
+import { formatAttributeValue } from '../../../components/listing-attribute-fields';
 import { SessionActions } from '../../../components/session-actions';
 import { FavoriteButton } from '../../../components/favorite-button';
 import { CurrencyInput } from '../../../components/currency-input';
@@ -242,6 +243,19 @@ export default function ListingDetailPage() {
               {listing.description ||
                 'O anunciante ainda não informou detalhes adicionais.'}
             </p>
+            {listing.attributes && listing.attributes.length > 0 && (
+              <section aria-labelledby="attributes-title">
+                <h2 id="attributes-title">Atributos técnicos</h2>
+                <dl className="attribute-list">
+                  {listing.attributes.map((entry) => (
+                    <div key={entry.attribute.id}>
+                      <dt>{entry.attribute.label}</dt>
+                      <dd>{formatAttributeValue(entry)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            )}
             <div className="detail-facts">
               <div>
                 <span>Quantidade</span>

@@ -5,7 +5,12 @@ import { FormEvent, useEffect, useState } from 'react';
 import { SessionActions } from '../../components/session-actions';
 import { ListingCard as ListingCardView } from '../../components/listing-card';
 import { SaveSearchButton } from '../../components/save-search-button';
-import { api, ListingCard, ListingFacets } from '../../lib/api';
+import {
+  api,
+  ListingCard,
+  ListingFacets,
+  MaterialAttribute,
+} from '../../lib/api';
 
 const emptyFacets: ListingFacets = { categories: [], types: [], states: [] };
 const RADIUS_OPTIONS = [25, 50, 100, 250, 500];
@@ -33,6 +38,10 @@ export default function ListingsPage() {
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [categoryAttributes, setCategoryAttributes] = useState<
+    MaterialAttribute[]
+  >([]);
+  const [attrFilters, setAttrFilters] = useState<Record<string, string>>({});
 
   useEffect(() => {
     api
@@ -55,6 +64,13 @@ export default function ListingsPage() {
       setType(requestedType);
     const requestedCategory = params.get('categoryId');
     if (requestedCategory) setCategoryId(requestedCategory);
+    const requestedAttrs: Record<string, string> = {};
+    for (const raw of params.getAll('attr')) {
+      const separator = raw.indexOf(':');
+      if (separator > 0)
+        requestedAttrs[raw.slice(0, separator)] = raw.slice(separator + 1);
+    }
+    setAttrFilters(requestedAttrs);
     const requestedState = params.get('state');
     if (requestedState) setState(requestedState.toUpperCase());
     if (params.get('verified') === 'true') setVerified(true);
@@ -66,6 +82,30 @@ export default function ListingsPage() {
     if (Number.isFinite(requestedRadius) && requestedRadius > 0)
       setRadiusKm(requestedRadius);
   }, []);
+
+  useEffect(() => {
+    if (!categoryId) {
+      setCategoryAttributes([]);
+      return;
+    }
+    api
+      .categoryAttributes(categoryId)
+      .then(({ attributes }) =>
+        setCategoryAttributes(
+          attributes.filter(
+            (item) =>
+              item.isFilterable &&
+              (item.type === 'SELECT' || item.type === 'BOOLEAN'),
+          ),
+        ),
+      )
+      .catch(() => setCategoryAttributes([]));
+  }, [categoryId]);
+
+  const attrParams = Object.entries(attrFilters)
+    .filter(([, value]) => value)
+    .map(([id, value]) => `${id}:${value}`);
+  const attrKey = attrParams.join('|');
 
   useEffect(() => {
     let active = true;
@@ -83,6 +123,7 @@ export default function ListingsPage() {
         longitude: coords?.longitude,
         radiusKm: coords ? radiusKm : undefined,
         sort: coords ? 'distance' : undefined,
+        attr: attrParams,
       })
       .then((result) => {
         if (!active) return;
@@ -101,7 +142,18 @@ export default function ListingsPage() {
     return () => {
       active = false;
     };
-  }, [query, type, categoryId, state, verified, coords, radiusKm, reloadKey]);
+    // attrKey stands for attrParams, which is rebuilt on every render.
+  }, [
+    query,
+    type,
+    categoryId,
+    state,
+    verified,
+    coords,
+    radiusKm,
+    reloadKey,
+    attrKey,
+  ]);
 
   async function loadMore() {
     if (!cursor) return;
@@ -118,6 +170,7 @@ export default function ListingsPage() {
         longitude: coords?.longitude,
         radiusKm: coords ? radiusKm : undefined,
         sort: coords ? 'distance' : undefined,
+        attr: attrParams,
         cursor,
       });
       setListings((current) => [...current, ...result.data]);
@@ -138,6 +191,7 @@ export default function ListingsPage() {
     verified?: boolean;
     coords?: { latitude: number; longitude: number } | null;
     radiusKm?: number;
+    attrs?: Record<string, string>;
   }) {
     const params = new URLSearchParams();
     if (next.q) params.set('q', next.q);
@@ -150,6 +204,9 @@ export default function ListingsPage() {
       params.set('longitude', String(next.coords.longitude));
       params.set('radiusKm', String(next.radiusKm ?? radiusKm));
     }
+    if (next.categoryId)
+      for (const [id, value] of Object.entries(next.attrs ?? attrFilters))
+        if (value) params.append('attr', `${id}:${value}`);
     window.history.replaceState(
       null,
       '',
@@ -179,7 +236,30 @@ export default function ListingsPage() {
   function toggleCategory(nextCategoryId: string) {
     const next = nextCategoryId === categoryId ? '' : nextCategoryId;
     setCategoryId(next);
-    syncUrl({ q: query, type, categoryId: next, state, verified, coords });
+    setAttrFilters({});
+    syncUrl({
+      q: query,
+      type,
+      categoryId: next,
+      state,
+      verified,
+      coords,
+      attrs: {},
+    });
+  }
+
+  function changeAttribute(attributeId: string, value: string) {
+    const nextAttrs = { ...attrFilters, [attributeId]: value };
+    setAttrFilters(nextAttrs);
+    syncUrl({
+      q: query,
+      type,
+      categoryId,
+      state,
+      verified,
+      coords,
+      attrs: nextAttrs,
+    });
   }
 
   function toggleState(nextState: string) {
@@ -332,6 +412,38 @@ export default function ListingsPage() {
             </span>
           )}
         </div>
+        {categoryAttributes.length > 0 && (
+          <div
+            className="listing-geo attribute-filters"
+            aria-label="Filtros por atributo técnico"
+          >
+            {categoryAttributes.map((attribute) => (
+              <label key={attribute.id}>
+                {attribute.label}
+                <select
+                  value={attrFilters[attribute.id] ?? ''}
+                  onChange={(event) =>
+                    changeAttribute(attribute.id, event.target.value)
+                  }
+                >
+                  <option value="">Todos</option>
+                  {attribute.type === 'BOOLEAN' ? (
+                    <>
+                      <option value="true">Sim</option>
+                      <option value="false">Não</option>
+                    </>
+                  ) : (
+                    (attribute.options ?? []).map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+            ))}
+          </div>
+        )}
         {(facets.categories.length > 0 || facets.states.length > 0) && (
           <div className="listing-facets" aria-label="Filtros rápidos">
             {facets.categories.map((facet) => (

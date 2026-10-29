@@ -21,6 +21,7 @@ import {
   ListingsService,
 } from './listings.service';
 import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
+import { parseAttributeInput } from './listing-attributes';
 
 type ListingBody = {
   companyId?: unknown;
@@ -41,6 +42,7 @@ type ListingBody = {
   state?: unknown;
   latitude?: unknown;
   longitude?: unknown;
+  attributes?: unknown;
 };
 
 @Controller('listings')
@@ -220,6 +222,7 @@ export class ListingsCommandController {
       city: value('city', 120),
       state: value('state', 2),
       ...this.coordinates(body),
+      attributes: parseAttributeInput(body.attributes),
     };
   }
 

@@ -112,8 +112,49 @@ export type Material = {
   categoryId: string;
   defaultUnit: string;
 };
+export type MaterialAttribute = {
+  id: string;
+  key: string;
+  label: string;
+  type: 'TEXT' | 'NUMBER' | 'SELECT' | 'BOOLEAN';
+  unit: string | null;
+  options: string[] | null;
+  isFilterable: boolean;
+  sortOrder: number;
+};
+export type ListingAttributeValue = {
+  valueText: string | null;
+  valueNumber: string | null;
+  attribute: Pick<
+    MaterialAttribute,
+    'id' | 'key' | 'label' | 'type' | 'unit' | 'sortOrder'
+  >;
+};
+export type ListingFormValues = {
+  companyId: string;
+  categoryId: string;
+  materialId?: string;
+  type: 'BUY' | 'SELL';
+  title: string;
+  description?: string;
+  quantity: string;
+  unit: string;
+  unitPrice?: string;
+  frequency?: 'ONE_TIME' | 'WEEKLY' | 'MONTHLY' | 'CONTINUOUS';
+  riskClassification?: 'NON_HAZARDOUS' | 'HAZARDOUS' | 'UNKNOWN';
+  originDetails?: string;
+  ownTransport?: boolean;
+  requiresDocuments?: boolean;
+  city?: string;
+  state?: string;
+  attributes?: { attributeId: string; value: string }[];
+};
 export type ListingDetail = {
   id: string;
+  companyId?: string;
+  categoryId?: string;
+  materialId?: string | null;
+  attributes?: ListingAttributeValue[];
   type: 'BUY' | 'SELL';
   title: string;
   slug: string;
@@ -1127,8 +1168,10 @@ export const api = {
     radiusKm?: number;
     sort?: 'recent' | 'relevance' | 'distance';
     cursor?: string;
+    attr?: string[];
   }) => {
     const params = new URLSearchParams();
+    for (const value of input?.attr ?? []) params.append('attr', value);
     if (input?.page) params.set('page', String(input.page));
     if (input?.pageSize) params.set('pageSize', String(input.pageSize));
     if (input?.q) params.set('q', input.q);
@@ -1167,28 +1210,20 @@ export const api = {
     request<{ listing: ListingDetail & { status: string } }>(
       `/listings/mine/${id}`,
     ),
-  createListing: (input: {
-    companyId: string;
-    categoryId: string;
-    materialId?: string;
-    type: 'BUY' | 'SELL';
-    title: string;
-    description?: string;
-    quantity: string;
-    unit: string;
-    unitPrice?: string;
-    frequency?: 'ONE_TIME' | 'WEEKLY' | 'MONTHLY' | 'CONTINUOUS';
-    riskClassification?: 'NON_HAZARDOUS' | 'HAZARDOUS' | 'UNKNOWN';
-    originDetails?: string;
-    ownTransport?: boolean;
-    requiresDocuments?: boolean;
-    city?: string;
-    state?: string;
-  }) =>
+  createListing: (input: ListingFormValues) =>
     request<{ listing: { id: string } }>('/listings', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  updateListing: (id: string, input: Partial<ListingFormValues>) =>
+    request<{ listing: { id: string; status: string } }>(`/listings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  categoryAttributes: (categoryId: string) =>
+    request<{ attributes: MaterialAttribute[] }>(
+      `/categories/${categoryId}/attributes`,
+    ),
   myListings: () => request<{ listings: ListingCard[] }>('/listings/mine'),
   uploadListingPhotos: (id: string, photos: File[]) => {
     const body = new FormData();

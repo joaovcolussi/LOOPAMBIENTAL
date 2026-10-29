@@ -138,6 +138,7 @@ export class ListingsController {
     @Query('radiusKm') radiusKm?: string,
     @Query('sort') sort?: string,
     @Query('cursor') cursor?: string,
+    @Query('attr') attr?: string | string[],
   ): Promise<unknown> {
     return this.listingSearch.search({
       filters: normalizeListingSearchFilters({
@@ -153,6 +154,7 @@ export class ListingsController {
         longitude,
         radiusKm,
         sort,
+        attr,
       }),
       cursor,
       page: this.parsePositiveInteger(pageValue, 1),

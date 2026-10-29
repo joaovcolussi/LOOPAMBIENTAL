@@ -21,8 +21,30 @@ export type ListingSearchFilters = {
   maxPrice?: string;
   near?: Coordinates;
   radiusKm?: number;
+  attributes?: { attributeId: string; value: string }[];
   sort: ListingSearchSort;
 };
+
+const MAX_ATTRIBUTE_FILTERS = 5;
+
+// `attr=<attributeId>:<value>` pairs from the query string (exact match on
+// select/boolean/text attributes).
+function normalizeAttributeFilters(raw: unknown) {
+  const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+  const result: { attributeId: string; value: string }[] = [];
+  for (const item of values.slice(0, MAX_ATTRIBUTE_FILTERS)) {
+    if (typeof item !== 'string') continue;
+    const separator = item.indexOf(':');
+    if (separator <= 0) continue;
+    const attributeId = item.slice(0, separator).trim().slice(0, 36);
+    const value = item
+      .slice(separator + 1)
+      .trim()
+      .slice(0, 200);
+    if (attributeId && value) result.push({ attributeId, value });
+  }
+  return result;
+}
 
 type ListingCursor = {
   rank: number;
@@ -69,6 +91,7 @@ export function normalizeListingSearchFilters(input: {
   longitude?: unknown;
   radiusKm?: unknown;
   sort?: unknown;
+  attr?: unknown;
 }): ListingSearchFilters {
   const q = typeof input.q === 'string' ? input.q.trim().slice(0, 120) : '';
   const type =
@@ -101,6 +124,7 @@ export function normalizeListingSearchFilters(input: {
       : near
         ? 50
         : undefined;
+  const attributes = normalizeAttributeFilters(input.attr);
   const requestedSort =
     input.sort === 'recent' ||
     input.sort === 'relevance' ||
@@ -126,6 +150,7 @@ export function normalizeListingSearchFilters(input: {
     ...(maxPrice ? { maxPrice } : {}),
     ...(near ? { near } : {}),
     ...(radiusKm ? { radiusKm } : {}),
+    ...(attributes.length ? { attributes } : {}),
     sort,
   };
 }
@@ -197,6 +222,10 @@ function buildWhereSql(filters: ListingSearchFilters): Prisma.Sql {
   if (filters.q)
     conditions.push(
       Prisma.sql`MATCH(l.title, l.description) AGAINST (${filters.q} IN NATURAL LANGUAGE MODE)`,
+    );
+  for (const attribute of filters.attributes ?? [])
+    conditions.push(
+      Prisma.sql`EXISTS (SELECT 1 FROM listing_attributes la WHERE la.listing_id = l.id AND la.attribute_id = ${attribute.attributeId} AND la.value_text = ${attribute.value})`,
     );
   if (filters.near && filters.radiusKm) {
     const box = boundingBox(filters.near, filters.radiusKm);

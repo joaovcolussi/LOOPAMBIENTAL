@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { publicListingCardSelect } from '../listings/public-listing-select';
+import { materialAttributeSelect } from '../listings/listing-attributes';
 
 @Controller('categories')
 export class CategoriesController {
@@ -17,6 +18,18 @@ export class CategoriesController {
       categories: await this.prisma.wasteCategory.findMany({
         orderBy: { name: 'asc' },
         select: { id: true, name: true, slug: true },
+      }),
+    };
+  }
+
+  // Technical attributes configured for a category (form fields and filters).
+  @Get(':id/attributes')
+  async attributes(@Param('id') id: string): Promise<unknown> {
+    return {
+      attributes: await this.prisma.materialAttribute.findMany({
+        where: { OR: [{ categoryId: id }, { category: { slug: id } }] },
+        orderBy: { sortOrder: 'asc' },
+        select: materialAttributeSelect,
       }),
     };
   }

@@ -1,11 +1,11 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Recycle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { api, Category, Company, Material } from '../../../../lib/api';
-import { SessionActions } from '../../../../components/session-actions';
-import { CurrencyInput } from '../../../../components/currency-input';
+import { api, Company, ListingFormValues } from '../../../../lib/api';
+import { DashboardHeader } from '../../../../components/dashboard-header';
+import { ListingForm } from '../../../../components/listing-form';
 import {
   ListingDocumentPicker,
   MAX_LISTING_DOCUMENTS,
@@ -17,95 +17,31 @@ import { formatDateOnly } from '../../../../lib/format';
 export default function NewListingPage() {
   const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [companyId, setCompanyId] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [materialId, setMaterialId] = useState('');
-  const [type, setType] = useState<'BUY' | 'SELL'>('SELL');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [unit, setUnit] = useState('kg');
-  const [unitPrice, setUnitPrice] = useState('');
-  const [frequency, setFrequency] = useState<
-    'ONE_TIME' | 'WEEKLY' | 'MONTHLY' | 'CONTINUOUS'
-  >('ONE_TIME');
-  const [riskClassification, setRiskClassification] = useState<
-    'NON_HAZARDOUS' | 'HAZARDOUS' | 'UNKNOWN'
-  >('UNKNOWN');
-  const [originDetails, setOriginDetails] = useState('');
-  const [ownTransport, setOwnTransport] = useState(false);
-  const [requiresDocuments, setRequiresDocuments] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
   const [documents, setDocuments] = useState<PendingListingDocument[]>([]);
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.companies(), api.categories()])
-      .then(([companyResult, categoryResult]) => {
-        setCompanies(companyResult.companies);
-        setCategories(categoryResult.categories);
-        setCompanyId(companyResult.companies[0]?.id ?? '');
-        setCategoryId(categoryResult.categories[0]?.id ?? '');
-      })
-      .catch(() => router.replace('/entrar'))
+    api
+      .companies()
+      .then(({ companies: result }) => setCompanies(result))
+      .catch(() => router.replace('/entrar?next=/dashboard/anuncios/novo'))
       .finally(() => setLoading(false));
   }, [router]);
-  useEffect(() => {
-    if (categoryId)
-      api
-        .materials(categoryId)
-        .then(({ materials: result }) => {
-          setMaterials(result);
-          setMaterialId(result[0]?.id ?? '');
-        })
-        .catch(() => setMaterials([]));
-  }, [categoryId]);
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError('');
-    setSaving(true);
-    let listingCreated = false;
+
+  async function submit(values: ListingFormValues) {
+    const { listing } = await api.createListing(values);
     try {
-      const { listing } = await api.createListing({
-        companyId,
-        categoryId,
-        materialId: materialId || undefined,
-        type,
-        title,
-        description: description || undefined,
-        quantity: quantity.replace(',', '.'),
-        unit,
-        unitPrice: unitPrice || undefined,
-        frequency,
-        riskClassification,
-        originDetails: originDetails || undefined,
-        ownTransport: type === 'SELL' ? ownTransport : undefined,
-        requiresDocuments,
-        city,
-        state,
-      });
-      listingCreated = true;
       if (photos.length) await api.uploadListingPhotos(listing.id, photos);
       for (const document of documents)
         await api.uploadListingDocument(listing.id, document);
       await api.submitListing(listing.id);
-      router.push('/dashboard/anuncios?created=review');
     } catch {
-      setError(
-        listingCreated
-          ? 'O anúncio foi salvo como rascunho, mas as fotos, os laudos ou o envio para análise falharam. Abra o anúncio no painel para continuar.'
-          : 'Não foi possível criar o anúncio. Confira os dados e tente novamente.',
-      );
-    } finally {
-      setSaving(false);
+      throw new Error('LISTING_SAVED_AS_DRAFT');
     }
+    router.push('/dashboard/anuncios?created=review');
   }
+
   if (loading)
     return (
       <main className="dashboard-page">
@@ -115,17 +51,7 @@ export default function NewListingPage() {
   if (!companies.length)
     return (
       <main className="dashboard-page">
-        <nav className="dashboard-nav shell">
-          <a className="brand" href="/">
-            <Recycle size={21} /> LOOP <span>AMBIENTAL</span>
-          </a>
-          <div className="dashboard-nav-actions">
-            <a className="back-link" href="/dashboard">
-              <ArrowLeft size={15} /> Voltar ao painel
-            </a>
-            <SessionActions mode="dashboard" />
-          </div>
-        </nav>
+        <DashboardHeader />
         <section className="company-content shell">
           <p className="eyebrow">novo anúncio</p>
           <h1>Crie sua empresa primeiro</h1>
@@ -141,120 +67,18 @@ export default function NewListingPage() {
     );
   return (
     <main className="dashboard-page">
-      <nav className="dashboard-nav shell">
-        <a className="brand" href="/">
-          <Recycle size={21} /> LOOP <span>AMBIENTAL</span>
-        </a>
-        <div className="dashboard-nav-actions">
-          <a className="back-link" href="/dashboard">
-            <ArrowLeft size={15} /> Voltar ao painel
-          </a>
-          <SessionActions mode="dashboard" />
-        </div>
-      </nav>
+      <DashboardHeader />
       <section className="company-content shell">
         <p className="eyebrow">novo anúncio</p>
         <h1>Coloque um material em movimento.</h1>
         <p className="dashboard-lede">
           Descreva o que sua empresa quer comprar ou vender.
         </p>
-        <form className="company-form" onSubmit={submit}>
-          <div className="form-row">
-            <label>
-              Tipo
-              <select
-                value={type}
-                onChange={(event) =>
-                  setType(event.target.value as 'BUY' | 'SELL')
-                }
-              >
-                <option value="SELL">Quero vender</option>
-                <option value="BUY">Quero comprar</option>
-              </select>
-            </label>
-            <label>
-              Empresa
-              <select
-                required
-                value={companyId}
-                onChange={(event) => setCompanyId(event.target.value)}
-              >
-                {companies.map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {company.tradeName || company.legalName}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="form-row">
-            <label>
-              Frequência
-              <select
-                value={frequency}
-                onChange={(event) =>
-                  setFrequency(
-                    event.target.value as
-                      'ONE_TIME' | 'WEEKLY' | 'MONTHLY' | 'CONTINUOUS',
-                  )
-                }
-              >
-                <option value="ONE_TIME">Operação única</option>
-                <option value="WEEKLY">Semanal</option>
-                <option value="MONTHLY">Mensal</option>
-                <option value="CONTINUOUS">Contínuo</option>
-              </select>
-            </label>
-            <label>
-              Classificação do resíduo
-              <select
-                value={riskClassification}
-                onChange={(event) =>
-                  setRiskClassification(
-                    event.target.value as
-                      'NON_HAZARDOUS' | 'HAZARDOUS' | 'UNKNOWN',
-                  )
-                }
-              >
-                <option value="UNKNOWN">Não informado</option>
-                <option value="NON_HAZARDOUS">Não perigoso</option>
-                <option value="HAZARDOUS">Perigoso</option>
-              </select>
-            </label>
-          </div>
-          <label>
-            Origem do resíduo
-            <input
-              maxLength={240}
-              value={originDetails}
-              onChange={(event) => setOriginDetails(event.target.value)}
-              placeholder="Ex.: planta industrial, linha de produção ou unidade"
-            />
-          </label>
-          <div className="form-options">
-            {type === 'SELL' && (
-              <label className="form-check">
-                <input
-                  type="checkbox"
-                  checked={ownTransport}
-                  onChange={(event) => setOwnTransport(event.target.checked)}
-                />
-                <span>Possui transporte próprio</span>
-              </label>
-            )}
-            {type === 'BUY' && (
-              <label className="form-check">
-                <input
-                  type="checkbox"
-                  checked={requiresDocuments}
-                  onChange={(event) =>
-                    setRequiresDocuments(event.target.checked)
-                  }
-                />
-                <span>Exigir laudos</span>
-              </label>
-            )}
-          </div>
+        <ListingForm
+          companies={companies}
+          submitLabel="Enviar anúncio para análise"
+          onSubmit={submit}
+        >
           <label>
             Fotos do anúncio
             <input
@@ -281,10 +105,9 @@ export default function NewListingPage() {
           <fieldset className="listing-document-fieldset">
             <legend>Laudos e documentos técnicos</legend>
             <p className="form-note">
-              {type === 'BUY'
-                ? 'Anexe especificações ou laudos de referência que o material comprado deve atender.'
-                : 'Anexe laudos de caracterização, análises laboratoriais ou FDS do material vendido.'}{' '}
-              Os laudos ficam disponíveis apenas para usuários autenticados.
+              Anexe laudos de caracterização, análises laboratoriais, FDS ou
+              especificações de referência. Os laudos ficam disponíveis apenas
+              para usuários autenticados.
             </p>
             {documents.length > 0 && (
               <ul className="listing-document-list">
@@ -318,7 +141,6 @@ export default function NewListingPage() {
               </ul>
             )}
             <ListingDocumentPicker
-              disabled={saving}
               remaining={MAX_LISTING_DOCUMENTS - documents.length}
               submitLabel="Adicionar laudo"
               onAdd={(document) =>
@@ -326,114 +148,7 @@ export default function NewListingPage() {
               }
             />
           </fieldset>
-          <label>
-            Título do anúncio *
-            <input
-              required
-              minLength={5}
-              maxLength={180}
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Ex.: Fardos de papelão ondulado"
-            />
-          </label>
-          <div className="form-row">
-            <label>
-              Categoria
-              <select
-                required
-                value={categoryId}
-                onChange={(event) => setCategoryId(event.target.value)}
-              >
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Material
-              <select
-                value={materialId}
-                onChange={(event) => setMaterialId(event.target.value)}
-              >
-                <option value="">Não especificado</option>
-                {materials.map((material) => (
-                  <option key={material.id} value={material.id}>
-                    {material.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label>
-            Descrição
-            <textarea
-              rows={5}
-              maxLength={5000}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </label>
-          <div className="form-row">
-            <label>
-              Quantidade *
-              <input
-                required
-                inputMode="decimal"
-                pattern="[0-9]+([.,][0-9]{1,3})?"
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
-                placeholder="Ex.: 1000 ou 1000,5"
-              />
-            </label>
-            <label>
-              Unidade *
-              <input
-                required
-                maxLength={20}
-                value={unit}
-                onChange={(event) => setUnit(event.target.value)}
-              />
-            </label>
-          </div>
-          <div className="form-row">
-            <label>
-              Preço unitário
-              <CurrencyInput
-                value={unitPrice}
-                onChange={setUnitPrice}
-                placeholder="R$ 0,00 (opcional)"
-              />
-            </label>
-            <label>
-              Estado
-              <input
-                maxLength={2}
-                value={state}
-                onChange={(event) => setState(event.target.value.toUpperCase())}
-              />
-            </label>
-          </div>
-          <label>
-            Cidade
-            <input
-              maxLength={120}
-              value={city}
-              onChange={(event) => setCity(event.target.value)}
-            />
-          </label>
-          {error && (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          )}
-          <button className="button" disabled={saving}>
-            {saving ? 'Enviando...' : 'Enviar anúncio para análise'}{' '}
-            <ArrowRight size={16} />
-          </button>
-        </form>
+        </ListingForm>
       </section>
     </main>
   );
