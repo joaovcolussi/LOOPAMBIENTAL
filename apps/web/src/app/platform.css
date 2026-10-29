@@ -287,19 +287,30 @@
   gap: 4px;
 }
 .bar-list .bar-label {
+  align-items: baseline;
   display: flex;
   font-size: 0.88rem;
+  gap: 12px;
   justify-content: space-between;
+}
+.bar-list .bar-label span,
+.bar-list .bar-label strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+  letter-spacing: normal;
+  line-height: 1.4;
 }
 .bar-list .bar-track {
   background: var(--surface-muted);
   border-radius: 999px;
+  display: block;
   height: 8px;
   overflow: hidden;
 }
 .bar-list .bar-fill {
   background: var(--accent);
   border-radius: 999px;
+  display: block;
   height: 100%;
 }
 .disclaimer {
