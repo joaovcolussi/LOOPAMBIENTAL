@@ -620,6 +620,51 @@ export type AccountSession = {
   expiresAt: string;
   current: boolean;
 };
+export type CompanyReport = {
+  range: { from: string; to: string };
+  commercial: {
+    dealsByStatus: Record<string, number>;
+    completedDeals: number;
+    revenue: number;
+    spend: number;
+    averageTicket: number;
+    proposalsSent: { total: number; byStatus: Record<string, number> };
+    proposalsReceived: { total: number; byStatus: Record<string, number> };
+    conversionRate: { sent: number; received: number };
+    listingsByStatus: Record<string, number>;
+  };
+  environmental: {
+    divertedKg: number;
+    co2eAvoidedKg: number;
+    treesEquivalent: number;
+    dealsWithoutMassUnit: number;
+    methodology: string;
+  };
+  byCategory: {
+    categoryId: string;
+    name: string;
+    slug: string;
+    deals: number;
+    value: number;
+    kilograms: number;
+    co2eKg: number;
+  }[];
+  monthly: { month: string; sold: number; bought: number; kilograms: number }[];
+};
+export type Recommendation = {
+  listing: ListingCard;
+  score: number;
+  reasons: string[];
+};
+export type ApiKey = {
+  id: string;
+  name: string;
+  prefix: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  createdBy: { id: string; name: string };
+};
 export type PaymentPurpose = 'DEAL' | 'SUBSCRIPTION' | 'CONTACT_UNLOCK';
 export type Payment = {
   id: string;
@@ -1699,4 +1744,45 @@ export const api = {
         body: JSON.stringify(input),
       },
     ),
+  companyReport: (companyId: string, range?: { from?: string; to?: string }) =>
+    request<CompanyReport>(
+      `/companies/${companyId}/reports${adminQuery(range)}`,
+    ),
+  companyReportCsvUrl: (
+    companyId: string,
+    range?: { from?: string; to?: string },
+  ) =>
+    `${API_URL}/companies/${companyId}/reports/deals.csv${adminQuery(range)}`,
+  recommendations: () =>
+    request<{
+      basedOn: {
+        complementaryCategories: number;
+        favoriteCategories: number;
+        savedSearchCategories: number;
+      };
+      recommendations: Recommendation[];
+    }>('/recommendations'),
+  apiKeys: (companyId: string) =>
+    request<{ keys: ApiKey[] }>(`/companies/${companyId}/api-keys`),
+  createApiKey: (companyId: string, name: string) =>
+    request<{ key: ApiKey; secret: string }>(
+      `/companies/${companyId}/api-keys`,
+      { method: 'POST', body: JSON.stringify({ name }) },
+    ),
+  revokeApiKey: (companyId: string, keyId: string) =>
+    request<{ revoked: boolean }>(`/companies/${companyId}/api-keys/${keyId}`, {
+      method: 'DELETE',
+    }),
+  listingsExportUrl: (companyId: string) =>
+    `${API_URL}/companies/${companyId}/listings/export.csv`,
+  listingsTemplateUrl: (companyId: string) =>
+    `${API_URL}/companies/${companyId}/listings/import-template.csv`,
+  importListings: (companyId: string, csv: string, submit: boolean) =>
+    request<{
+      created: { line: number; id: string; title: string }[];
+      errors: { line: number; error: string }[];
+    }>(`/companies/${companyId}/listings/import`, {
+      method: 'POST',
+      body: JSON.stringify({ csv, submit }),
+    }),
 };

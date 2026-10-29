@@ -108,6 +108,17 @@ import {
   AdminDataRequestsController,
 } from './modules/account/account.controller';
 import { AccountService } from './modules/account/account.service';
+import { CompanyReportsController } from './modules/reports-analytics/company-reports.controller';
+import { CompanyReportsService } from './modules/reports-analytics/company-reports.service';
+import { ListingRecommendationsController } from './modules/listings/listing-recommendations.controller';
+import { ListingRecommendationsService } from './modules/listings/listing-recommendations.service';
+import {
+  CompanyIntegrationsController,
+  ErpIntegrationController,
+} from './modules/integrations/integrations.controller';
+import { IntegrationsService } from './modules/integrations/integrations.service';
+import { ApiKeysService } from './modules/integrations/api-keys.service';
+import { ApiKeyGuard } from './modules/integrations/api-key.guard';
 
 @Controller('health')
 class HealthController {
@@ -182,6 +193,10 @@ class HealthController {
     AdminDataRequestsController,
     ObservabilityController,
     AdminLogisticsController,
+    CompanyReportsController,
+    ListingRecommendationsController,
+    CompanyIntegrationsController,
+    ErpIntegrationController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
@@ -220,6 +235,11 @@ class HealthController {
     ReviewsService,
     DealsService,
     AccountService,
+    CompanyReportsService,
+    ListingRecommendationsService,
+    IntegrationsService,
+    ApiKeysService,
+    ApiKeyGuard,
   ],
 })
 export class AppModule {}

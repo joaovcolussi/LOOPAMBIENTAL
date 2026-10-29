@@ -397,3 +397,31 @@
     transition: none;
   }
 }
+
+.recommendation {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.recommendation-reasons {
+  color: var(--muted);
+  padding: 0 4px;
+}
+.recommendation-reasons li {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.recommendation-reasons li::before {
+  content: '• ';
+  color: var(--accent);
+}
+.tracking {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.attribute-filters label {
+  display: grid;
+  font-size: 0.85rem;
+  gap: 4px;
+}
