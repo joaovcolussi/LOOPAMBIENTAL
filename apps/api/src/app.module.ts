@@ -97,6 +97,11 @@ import {
   DealsController,
 } from './modules/deals/deals.controller';
 import { DealsService } from './modules/deals/deals.service';
+import {
+  AccountController,
+  AdminDataRequestsController,
+} from './modules/account/account.controller';
+import { AccountService } from './modules/account/account.service';
 
 @Controller('health')
 class HealthController {
@@ -167,6 +172,8 @@ class HealthController {
     RealtimeController,
     DealsController,
     AdminDealsController,
+    AccountController,
+    AdminDataRequestsController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
@@ -202,6 +209,7 @@ class HealthController {
     ContactUnlocksService,
     ReviewsService,
     DealsService,
+    AccountService,
   ],
 })
 export class AppModule {}

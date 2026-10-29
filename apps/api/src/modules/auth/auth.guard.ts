@@ -20,6 +20,7 @@ export type AuthenticatedRequest = Request & {
     status: string;
     platformRole: string;
     emailVerifiedAt: Date | null;
+    mfaEnabledAt?: Date | null;
     createdAt: Date;
   };
 };

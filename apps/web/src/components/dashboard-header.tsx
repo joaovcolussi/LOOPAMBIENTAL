@@ -1,4 +1,7 @@
+'use client';
+
 import { ArrowLeft, Recycle } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { SessionActions } from './session-actions';
 
 type DashboardHeaderProps = {
@@ -8,8 +11,9 @@ type DashboardHeaderProps = {
 
 export function DashboardHeader({
   backHref = '/dashboard',
-  backLabel = 'Voltar ao painel',
+  backLabel,
 }: DashboardHeaderProps) {
+  const t = useTranslations('dashboardHeader');
   return (
     <nav className="dashboard-nav shell">
       <a className="brand" href="/">
@@ -17,7 +21,7 @@ export function DashboardHeader({
       </a>
       <div className="dashboard-nav-actions">
         <a className="back-link" href={backHref}>
-          <ArrowLeft size={15} /> {backLabel}
+          <ArrowLeft size={15} /> {backLabel ?? t('back')}
         </a>
         <SessionActions mode="dashboard" />
       </div>

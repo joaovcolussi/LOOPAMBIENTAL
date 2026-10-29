@@ -63,7 +63,12 @@ export async function registerAccount(
   try {
     const email = await uniqueEmail(input.email);
     const registerResponse = await context.post(apiPath('/auth/register'), {
-      data: { name: input.name, email, password: input.password },
+      data: {
+        name: input.name,
+        email,
+        password: input.password,
+        acceptTerms: true,
+      },
     });
     if (!registerResponse.ok() && registerResponse.status() !== 409) {
       throw new Error(

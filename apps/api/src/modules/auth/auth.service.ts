@@ -1,5 +1,7 @@
 import {
+  BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   Optional,
@@ -15,6 +17,9 @@ import { promisify } from 'node:util';
 import type { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { EmailService } from './email.service';
+import { PRIVACY_VERSION, TERMS_VERSION } from '../../common/legal-versions';
+import { decryptField } from '../../common/field-encryption';
+import { verifyTotp } from '../../common/totp';
 
 const scrypt = promisify(nodeScrypt);
 export const SESSION_COOKIE = 'loopambiental_session';
@@ -24,6 +29,22 @@ export const SESSION_IDLE_SECONDS = 20 * 60;
 export const SESSION_ABSOLUTE_SECONDS = 30 * 24 * 60 * 60;
 
 type SessionContext = { userAgent?: string; ipAddress?: string };
+
+const MFA_CHALLENGE_SECONDS = 5 * 60;
+
+// Mandatory by default; local/CI environments may opt out explicitly.
+export function emailVerificationRequired() {
+  return process.env.REQUIRE_EMAIL_VERIFICATION !== 'false';
+}
+
+const publicUserSelect = {
+  id: true,
+  name: true,
+  email: true,
+  status: true,
+  platformRole: true,
+  createdAt: true,
+} as const;
 
 @Injectable()
 export class AuthService {
@@ -39,7 +60,10 @@ export class AuthService {
     email: string,
     password: string,
     context: SessionContext,
+    options: { acceptTerms?: boolean } = {},
   ) {
+    if (options.acceptTerms !== true)
+      throw new BadRequestException('TERMS_NOT_ACCEPTED');
     const normalizedEmail = email.trim().toLowerCase();
     const existingUser = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
@@ -53,17 +77,27 @@ export class AuthService {
         email: normalizedEmail,
         passwordHash,
         status: 'ACTIVE',
+        consents: {
+          create: [
+            {
+              type: 'TERMS',
+              version: TERMS_VERSION,
+              ipAddress: context.ipAddress,
+            },
+            {
+              type: 'PRIVACY',
+              version: PRIVACY_VERSION,
+              ipAddress: context.ipAddress,
+            },
+          ],
+        },
       },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        status: true,
-        platformRole: true,
-        createdAt: true,
-      },
+      select: publicUserSelect,
     });
-    const token = await this.createSession(user.id, context);
+    const verificationRequired = emailVerificationRequired();
+    const token = verificationRequired
+      ? null
+      : await this.createSession(user.id, context);
     if (this.prisma.authToken) {
       const verificationToken = await this.createAuthToken(
         user.id,
@@ -80,7 +114,26 @@ export class AuthService {
         );
       }
     }
-    return { user, token };
+    return { user, token, verificationRequired };
+  }
+
+  // Always answers the same way so it cannot be used to enumerate accounts.
+  async resendVerification(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+      select: { id: true, email: true, emailVerifiedAt: true, status: true },
+    });
+    if (user && !user.emailVerifiedAt && user.status === 'ACTIVE') {
+      const token = await this.createAuthToken(user.id, 'EMAIL_VERIFICATION');
+      try {
+        await this.emailService?.sendEmailVerification(user.email, token);
+      } catch (error) {
+        this.logger.warn(
+          `Verification email failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    return { requested: true };
   }
 
   async verifyEmail(token: string) {
@@ -180,7 +233,82 @@ export class AuthService {
     );
     if (!user || !validPassword || user.status !== 'ACTIVE')
       throw new UnauthorizedException('INVALID_CREDENTIALS');
+    // Only revealed after a correct password, so it leaks nothing new.
+    if (emailVerificationRequired() && !user.emailVerifiedAt)
+      throw new ForbiddenException('EMAIL_NOT_VERIFIED');
 
+    const publicUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      status: user.status,
+      platformRole: user.platformRole,
+      createdAt: user.createdAt,
+    };
+    if (user.mfaEnabledAt) {
+      const challengeToken = await this.createAuthToken(
+        user.id,
+        'MFA_CHALLENGE',
+        MFA_CHALLENGE_SECONDS,
+      );
+      return {
+        user: publicUser,
+        token: null,
+        mfaRequired: true,
+        challengeToken,
+      };
+    }
+    const token = await this.createSession(user.id, context);
+    return { user: publicUser, token, mfaRequired: false };
+  }
+
+  /** Second login step: exchanges a challenge plus TOTP/recovery code. */
+  async completeMfaLogin(
+    challengeToken: string,
+    code: string,
+    context: SessionContext,
+  ) {
+    const authToken = await this.prisma.authToken.findUnique({
+      where: { tokenHash: this.hashToken(challengeToken) },
+      include: { user: true },
+    });
+    if (
+      !authToken ||
+      authToken.type !== 'MFA_CHALLENGE' ||
+      authToken.usedAt ||
+      authToken.expiresAt <= new Date() ||
+      authToken.user.status !== 'ACTIVE' ||
+      !authToken.user.mfaEnabledAt ||
+      !authToken.user.mfaSecretEncrypted
+    )
+      throw new UnauthorizedException('INVALID_MFA_CHALLENGE');
+    const secret = decryptField(authToken.user.mfaSecretEncrypted);
+    const user = authToken.user;
+    let valid = Boolean(secret && verifyTotp(secret, code));
+    let remainingRecoveryCodes: string[] | null = null;
+    if (!valid) {
+      const hashes = Array.isArray(user.mfaRecoveryCodes)
+        ? (user.mfaRecoveryCodes as string[])
+        : [];
+      const candidate = this.hashToken(code.trim().toUpperCase());
+      if (hashes.includes(candidate)) {
+        valid = true;
+        remainingRecoveryCodes = hashes.filter((hash) => hash !== candidate);
+      }
+    }
+    if (!valid) throw new UnauthorizedException('INVALID_MFA_CODE');
+    await this.prisma.$transaction(async (transaction) => {
+      await this.consumeAuthToken(
+        transaction,
+        authToken.id,
+        'INVALID_MFA_CHALLENGE',
+      );
+      if (remainingRecoveryCodes)
+        await transaction.user.update({
+          where: { id: user.id },
+          data: { mfaRecoveryCodes: remainingRecoveryCodes },
+        });
+    });
     const token = await this.createSession(user.id, context);
     return {
       user: {
@@ -207,6 +335,7 @@ export class AuthService {
             status: true,
             platformRole: true,
             emailVerifiedAt: true,
+            mfaEnabledAt: true,
             createdAt: true,
           },
         },
@@ -253,7 +382,7 @@ export class AuthService {
     });
   }
 
-  private async createSession(userId: string, context: SessionContext) {
+  async createSession(userId: string, context: SessionContext) {
     const token = randomBytes(32).toString('base64url');
     const now = Date.now();
     const expiresAt = new Date(now + SESSION_IDLE_SECONDS * 1000);
@@ -271,7 +400,7 @@ export class AuthService {
     return token;
   }
 
-  private async hashPassword(password: string) {
+  async hashPassword(password: string) {
     const salt = randomBytes(16).toString('hex');
     const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
     return `scrypt$${salt}$${derivedKey.toString('hex')}`;
@@ -285,7 +414,7 @@ export class AuthService {
   }
   private dummyHash: string | null = null;
 
-  private async verifyPassword(password: string, storedHash: string) {
+  async verifyPassword(password: string, storedHash: string) {
     const [, salt, storedKey] = storedHash.split('$');
     if (!salt || !storedKey) return false;
     const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
@@ -296,13 +425,14 @@ export class AuthService {
     );
   }
 
-  private hashToken(token: string) {
+  hashToken(token: string) {
     return createHash('sha256').update(token).digest('hex');
   }
 
   private async createAuthToken(
     userId: string,
-    type: 'EMAIL_VERIFICATION' | 'PASSWORD_RESET',
+    type: 'EMAIL_VERIFICATION' | 'PASSWORD_RESET' | 'MFA_CHALLENGE',
+    ttlSeconds = 60 * 60,
   ) {
     const token = randomBytes(32).toString('base64url');
     await this.prisma.authToken.create({
@@ -310,7 +440,7 @@ export class AuthService {
         userId,
         type,
         tokenHash: this.hashToken(token),
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + ttlSeconds * 1000),
       },
     });
     return token;

@@ -4,15 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-  randomUUID,
-} from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
+import { decryptField, encryptField } from '../../common/field-encryption';
 import { publicListingCardSelect } from '../listings/public-listing-select';
 
 export type CompanyInput = {
@@ -264,43 +259,12 @@ export class CompaniesService {
     return createHash('sha256').update(value.toLowerCase()).digest('hex');
   }
 
-  private fieldKey(): string {
-    const configured = process.env.FIELD_ENCRYPTION_KEY;
-    if (!configured) {
-      if (process.env.NODE_ENV === 'production')
-        throw new Error('FIELD_ENCRYPTION_KEY_REQUIRED');
-      return 'loop-local-field-key';
-    }
-    return configured;
-  }
-
   private encrypt(value: string) {
-    const key = createHash('sha256').update(this.fieldKey()).digest();
-    const iv = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', key, iv);
-    const encrypted = Buffer.concat([cipher.update(value), cipher.final()]);
-    return `v1:${iv.toString('base64url')}:${cipher.getAuthTag().toString('base64url')}:${encrypted.toString('base64url')}`;
+    return encryptField(value);
   }
 
   private decrypt(value: string) {
-    try {
-      const [, ivB64, tagB64, dataB64] = value.split(':');
-      if (!ivB64 || !tagB64 || !dataB64) return null;
-      const key = createHash('sha256').update(this.fieldKey()).digest();
-      const decipher = createDecipheriv(
-        'aes-256-gcm',
-        key,
-        Buffer.from(ivB64, 'base64url'),
-      );
-      decipher.setAuthTag(Buffer.from(tagB64, 'base64url'));
-      const decrypted = Buffer.concat([
-        decipher.update(Buffer.from(dataB64, 'base64url')),
-        decipher.final(),
-      ]);
-      return decrypted.toString('utf8');
-    } catch {
-      return null;
-    }
+    return decryptField(value);
   }
 
   private maskTaxId(value: string) {

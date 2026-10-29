@@ -559,6 +559,26 @@ export type CompanyReviews = {
   summary: { average: number; count: number };
   reviews: Review[];
 };
+export type AccountProfile = AuthUser & {
+  emailVerifiedAt: string | null;
+  mfaEnabledAt: string | null;
+  mfaRecoveryCodesRemaining: number;
+  consents: {
+    id: string;
+    type: 'TERMS' | 'PRIVACY';
+    version: string;
+    acceptedAt: string;
+  }[];
+  currentLegalVersions: { terms: string; privacy: string };
+};
+export type AccountSession = {
+  id: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  expiresAt: string;
+  current: boolean;
+};
 export type PaymentPurpose = 'DEAL' | 'SUBSCRIPTION' | 'CONTACT_UNLOCK';
 export type Payment = {
   id: string;
@@ -796,15 +816,36 @@ export type SavedSearch = {
 };
 
 export const api = {
-  register: (input: { name: string; email: string; password: string }) =>
-    request<{ user: AuthUser }>('/auth/register', {
+  register: (input: {
+    name: string;
+    email: string;
+    password: string;
+    acceptTerms: boolean;
+  }) =>
+    request<{ user: AuthUser; verificationRequired: boolean }>(
+      '/auth/register',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    ),
+  login: (input: { email: string; password: string }) =>
+    request<
+      | { user: AuthUser; mfaRequired?: undefined }
+      | { mfaRequired: true; challengeToken: string; user?: undefined }
+    >('/auth/login', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  login: (input: { email: string; password: string }) =>
-    request<{ user: AuthUser }>('/auth/login', {
+  verifyMfa: (challengeToken: string, code: string) =>
+    request<{ user: AuthUser }>('/auth/mfa/verify', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({ challengeToken, code }),
+    }),
+  resendVerification: (email: string) =>
+    request<{ requested: boolean }>('/auth/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
     }),
   me: () => request<{ user: AuthUser }>('/auth/me'),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
@@ -1464,4 +1505,57 @@ export const api = {
         body: JSON.stringify({ resolution, notes }),
       },
     ),
+  account: () => request<{ user: AccountProfile }>('/me'),
+  updateAccount: (input: { name: string }) =>
+    request<{ user: AccountProfile }>('/me', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  acceptCurrentTerms: () =>
+    request<{ user: AccountProfile }>('/me/consents', { method: 'POST' }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ changed: boolean }>('/me/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  accountSessions: () =>
+    request<{ sessions: AccountSession[] }>('/me/sessions'),
+  revokeAccountSession: (id: string) =>
+    request<{ revoked: boolean }>(`/me/sessions/${id}`, { method: 'DELETE' }),
+  revokeOtherSessions: () =>
+    request<{ revoked: number }>('/me/sessions/revoke-others', {
+      method: 'POST',
+    }),
+  startMfaSetup: () =>
+    request<{ secret: string; otpauthUrl: string }>('/me/mfa/setup', {
+      method: 'POST',
+    }),
+  enableMfa: (code: string) =>
+    request<{ enabled: boolean; recoveryCodes: string[] }>('/me/mfa/enable', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
+  disableMfa: (password: string, code: string) =>
+    request<{ enabled: boolean }>('/me/mfa/disable', {
+      method: 'POST',
+      body: JSON.stringify({ password, code }),
+    }),
+  dataExportUrl: () => `${API_URL}/me/data-export`,
+  deleteAccount: (password: string, confirmation: string) =>
+    request<{ deleted: boolean }>('/me/delete-account', {
+      method: 'POST',
+      body: JSON.stringify({ password, confirmation }),
+    }),
+  adminDataRequests: () =>
+    request<{
+      requests: {
+        id: string;
+        type: 'EXPORT' | 'DELETION';
+        status: 'COMPLETED' | 'REJECTED';
+        notes: string | null;
+        createdAt: string;
+        completedAt: string | null;
+        user: { id: string; name: string };
+      }[];
+    }>('/admin/data-requests'),
 };

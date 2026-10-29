@@ -11,7 +11,9 @@ import { SessionActions } from '../components/session-actions';
 import { ListingCard } from '../lib/api';
 import { ListingCard as ListingCardView } from '../components/listing-card';
 import { RecyclingCarousel } from '../components/recycling-carousel';
+import { LanguageSwitcher } from '../components/language-switcher';
 import { HomeCarouselSlide } from '../lib/api';
+import { getTranslations } from 'next-intl/server';
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
@@ -44,6 +46,8 @@ async function fetchJson<T>(path: string): Promise<T | null> {
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
+  const t = await getTranslations('home');
+  const nav = await getTranslations('nav');
   const [statsResult, listingsResult, carouselResult] = await Promise.all([
     fetchJson<PublicStats>('/stats'),
     fetchJson<{ data: ListingCard[] }>('/listings?pageSize=6'),
@@ -71,10 +75,11 @@ export default async function HomePage() {
           <Recycle size={22} /> LOOP <span>AMBIENTAL</span>
         </a>
         <div className="nav-links">
-          <a href="/como-funciona">Como funciona</a>
-          <a href="#anuncios">Anúncios</a>
-          <a href="/planos">Planos</a>
-          <a href="/empresas">Para empresas</a>
+          <a href="/como-funciona">{nav('howItWorks')}</a>
+          <a href="#anuncios">{nav('listings')}</a>
+          <a href="/planos">{nav('plans')}</a>
+          <a href="/empresas">{nav('forCompanies')}</a>
+          <a href="/desenvolvedores">{nav('developers')}</a>
         </div>
         <div className="nav-actions">
           <SessionActions />
@@ -84,25 +89,20 @@ export default async function HomePage() {
       <section className="hero shell" id="top">
         <div className="hero-copy">
           <p className="eyebrow">
-            <span /> marketplace B2B de resíduos industriais
+            <span /> {t('eyebrow')}
           </p>
-          <h1>
-            O resíduo de uma indústria pode ser o insumo estratégico de outra.
-          </h1>
-          <p className="hero-lede">
-            Conecte geradores a compradores de resíduos e subprodutos, reduza
-            custos de descarte e gere valor para a cadeia produtiva.
-          </p>
+          <h1>{t('title')}</h1>
+          <p className="hero-lede">{t('lede')}</p>
           <div className="hero-actions">
             <a className="button" href="#anuncios">
-              Explorar oportunidades <ArrowRight size={17} />
+              {t('explore')} <ArrowRight size={17} />
             </a>
             <a className="text-link" href="/cadastro">
-              Quero anunciar <ArrowRight size={16} />
+              {t('advertise')} <ArrowRight size={16} />
             </a>
           </div>
           <div className="trust">
-            <CheckCircle2 size={17} /> Empresas e operações verificadas
+            <CheckCircle2 size={17} /> {t('trust')}
           </div>
         </div>
         <div className="hero-art">
@@ -113,41 +113,34 @@ export default async function HomePage() {
       <section className="stats shell">
         <div>
           <strong>{stats.totalListings}</strong>
-          <span>anúncios publicados</span>
+          <span>{t('statsPublished')}</span>
         </div>
         <div>
           <strong>{stats.buyListings}</strong>
-          <span>demanda de compra</span>
+          <span>{t('statsBuy')}</span>
         </div>
         <div>
           <strong>{stats.sellListings}</strong>
-          <span>oferta de venda</span>
+          <span>{t('statsSell')}</span>
         </div>
         <div>
           <strong>{stats.verifiedCompanies}</strong>
-          <span>empresas verificadas</span>
+          <span>{t('statsVerified')}</span>
         </div>
       </section>
 
       <section className="market-pulse shell" aria-labelledby="pulse-title">
         <div className="pulse-copy">
-          <p className="eyebrow">pulso da cadeia</p>
-          <h2 id="pulse-title">Onde a indústria está encontrando valor.</h2>
-          <p>
-            Distribuição dos anúncios publicados por categoria na rede LOOP
-            AMBIENTAL.
-          </p>
+          <p className="eyebrow">{t('pulseEyebrow')}</p>
+          <h2 id="pulse-title">{t('pulseTitle')}</h2>
+          <p>{t('pulseBody')}</p>
           <a className="text-link" href="/anuncios">
-            Ver oportunidades ativas <ArrowRight size={16} />
+            {t('pulseLink')} <ArrowRight size={16} />
           </a>
         </div>
-        <div
-          className="pulse-chart"
-          role="img"
-          aria-label="Movimento por categoria"
-        >
+        <div className="pulse-chart" role="img" aria-label={t('pulseAria')}>
           <div className="pulse-chart-header">
-            <span>anúncios por categoria</span>
+            <span>{t('pulseChart')}</span>
             <strong>{stats.totalListings}</strong>
           </div>
           <div className="chart-bars">
@@ -166,7 +159,7 @@ export default async function HomePage() {
             ))}
             {stats.demandByCategory.length === 0 && (
               <div className="chart-row">
-                <span>Ainda não há dados.</span>
+                <span>{t('pulseEmpty')}</span>
                 <div>
                   <i style={{ width: '5%' }} />
                 </div>
@@ -183,10 +176,8 @@ export default async function HomePage() {
       >
         <div className="section-heading">
           <div>
-            <p className="eyebrow">impacto que começa na operação</p>
-            <h2 id="problems-title">
-              Problemas ambientais que a LOOP ajuda a resolver.
-            </h2>
+            <p className="eyebrow">{t('problemsEyebrow')}</p>
+            <h2 id="problems-title">{t('problemsTitle')}</h2>
           </div>
         </div>
         <div className="problem-grid">
@@ -194,31 +185,22 @@ export default async function HomePage() {
             <span className="problem-icon">
               <Truck size={22} />
             </span>
-            <h3>Transporte e descarte desnecessários</h3>
-            <p>
-              Aproximamos oferta e demanda para reduzir deslocamentos sem
-              destino comercial e custos de descarte.
-            </p>
+            <h3>{t('problem1Title')}</h3>
+            <p>{t('problem1Body')}</p>
           </article>
           <article className="problem-card">
             <span className="problem-icon">
               <Factory size={22} />
             </span>
-            <h3>Resíduo tratado como perda</h3>
-            <p>
-              Damos visibilidade a materiais que podem voltar para processos
-              produtivos como matéria-prima ou subproduto.
-            </p>
+            <h3>{t('problem2Title')}</h3>
+            <p>{t('problem2Body')}</p>
           </article>
           <article className="problem-card">
             <span className="problem-icon">
               <Leaf size={22} />
             </span>
-            <h3>Baixa rastreabilidade ambiental</h3>
-            <p>
-              Organizamos empresas, propostas e informações da operação para
-              apoiar decisões mais responsáveis e circulares.
-            </p>
+            <h3>{t('problem3Title')}</h3>
+            <p>{t('problem3Body')}</p>
           </article>
         </div>
       </section>
@@ -226,11 +208,11 @@ export default async function HomePage() {
       <section className="listing-section shell" id="anuncios">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">oportunidades recentes</p>
-            <h2>Resíduos com valor comercial</h2>
+            <p className="eyebrow">{t('recentEyebrow')}</p>
+            <h2>{t('recentTitle')}</h2>
           </div>
           <a className="text-link" href="/anuncios">
-            Ver todas as oportunidades <ArrowRight size={16} />
+            {t('recentAll')} <ArrowRight size={16} />
           </a>
         </div>
         <div className="search-bar">
@@ -238,15 +220,15 @@ export default async function HomePage() {
           <form action="/anuncios" method="get">
             <input
               name="q"
-              aria-label="Buscar por material, categoria ou cidade"
-              placeholder="Busque por resíduo, subproduto ou cidade"
+              aria-label={t('searchAria')}
+              placeholder={t('searchPlaceholder')}
             />
-            <button type="submit">Buscar</button>
+            <button type="submit">{t('searchButton')}</button>
           </form>
         </div>
         <div className="listing-grid">
           {listings.length === 0 ? (
-            <p className="empty-state">Ainda não há anúncios publicados.</p>
+            <p className="empty-state">{t('empty')}</p>
           ) : (
             listings.map((listing) => (
               <ListingCardView
@@ -260,14 +242,14 @@ export default async function HomePage() {
       </section>
 
       <section className="closing shell" id="como-funciona">
-        <p className="eyebrow">feito para o mercado real</p>
+        <p className="eyebrow">{t('closingEyebrow')}</p>
         <h2>
-          Menos descarte.
+          {t('closingLine1')}
           <br />
-          <em>Mais valor.</em>
+          <em>{t('closingLine2')}</em>
         </h2>
         <a className="button" href="/cadastro">
-          Começar agora <ArrowRight size={17} />
+          {t('start')} <ArrowRight size={17} />
         </a>
       </section>
       <footer className="footer shell">
@@ -275,11 +257,13 @@ export default async function HomePage() {
           <Recycle size={20} /> LOOP <span>AMBIENTAL</span>
         </a>
         <div className="footer-links">
-          <a href="/planos">Planos</a>
-          <a href="/termos">Termos</a>
-          <a href="/privacidade">Privacidade</a>
+          <a href="/planos">{nav('plans')}</a>
+          <a href="/desenvolvedores">{nav('developers')}</a>
+          <a href="/termos">{t('footerTerms')}</a>
+          <a href="/privacidade">{t('footerPrivacy')}</a>
         </div>
-        <span>Mercado circular para negócios melhores.</span>
+        <LanguageSwitcher compact />
+        <span>{t('footerTagline')}</span>
         <span>© 2026 LOOP AMBIENTAL</span>
       </footer>
     </main>

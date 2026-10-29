@@ -18,8 +18,14 @@ import {
 } from './auth.service';
 import { readSessionToken } from './session';
 
-type CredentialsBody = { name?: unknown; email?: unknown; password?: unknown };
+type CredentialsBody = {
+  name?: unknown;
+  email?: unknown;
+  password?: unknown;
+  acceptTerms?: unknown;
+};
 type TokenBody = { token?: unknown; email?: unknown; password?: unknown };
+type MfaBody = { challengeToken?: unknown; code?: unknown };
 
 // Sensitive identity endpoints get a tight per-IP budget to blunt credential
 // stuffing, brute force and e-mail bombing.
@@ -47,6 +53,43 @@ export class AuthController {
       email,
       password,
       this.context(request),
+      { acceptTerms: body.acceptTerms === true },
+    );
+    if (result.token) this.setSessionCookie(response, result.token);
+    return {
+      user: result.user,
+      verificationRequired: result.verificationRequired,
+    };
+  }
+
+  @Post('resend-verification')
+  @Throttle(AUTH_THROTTLE)
+  @HttpCode(200)
+  resendVerification(@Body() body: TokenBody) {
+    if (typeof body.email !== 'string' || !/^\S+@\S+\.\S+$/.test(body.email))
+      throw new BadRequestException('INVALID_EMAIL');
+    return this.authService.resendVerification(body.email);
+  }
+
+  @Post('mfa/verify')
+  @Throttle(AUTH_THROTTLE)
+  @HttpCode(200)
+  async verifyMfa(
+    @Body() body: MfaBody,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    if (
+      typeof body.challengeToken !== 'string' ||
+      typeof body.code !== 'string' ||
+      !body.challengeToken ||
+      body.code.length > 32
+    )
+      throw new BadRequestException('INVALID_MFA_DATA');
+    const result = await this.authService.completeMfaLogin(
+      body.challengeToken,
+      body.code,
+      this.context(request),
     );
     this.setSessionCookie(response, result.token);
     return { user: result.user };
@@ -66,7 +109,9 @@ export class AuthController {
       password,
       this.context(request),
     );
-    this.setSessionCookie(response, result.token);
+    if (result.mfaRequired)
+      return { mfaRequired: true, challengeToken: result.challengeToken };
+    if (result.token) this.setSessionCookie(response, result.token);
     return { user: result.user };
   }
 

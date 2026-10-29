@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale, getMessages } from 'next-intl/server';
 import { ThemeToggle } from '../components/theme-toggle';
 import { DemoBanner } from '../components/demo-banner';
 import './styles.css';
@@ -10,11 +12,13 @@ export const metadata: Metadata = {
     'Transforme resíduos industriais e subprodutos em valor para a cadeia produtiva.',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -29,9 +33,11 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <DemoBanner />
-        {children}
-        <ThemeToggle />
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <DemoBanner />
+          {children}
+          <ThemeToggle />
+        </NextIntlClientProvider>
       </body>
     </html>
   );
