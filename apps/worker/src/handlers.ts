@@ -118,23 +118,40 @@ export const handlers: Record<string, OutboxHandler> = {
 
   'payment.confirmed': async (payload, context) => {
     const companyId = asString(payload.companyId);
-    const dealId = asString(payload.dealId);
-    if (!companyId || !dealId) return;
-    const deal = await context.prisma.deal.findUnique({
-      where: { id: dealId },
-      select: { listing: { select: { title: true } } },
-    });
+    if (!companyId) return;
+    const purpose = asString(payload.purpose) || 'DEAL';
+    let subject = 'Pagamento confirmado';
+    let body = 'Um pagamento da sua empresa foi confirmado.';
+    if (purpose === 'DEAL') {
+      const dealId = asString(payload.dealId);
+      const deal = dealId
+        ? await context.prisma.deal.findUnique({
+            where: { id: dealId },
+            select: { listing: { select: { title: true } } },
+          })
+        : null;
+      const title = deal?.listing.title ?? 'sua negociação';
+      body = `O pagamento da negociação "${title}" foi confirmado. A coleta já pode ser agendada.`;
+    } else if (purpose === 'SUBSCRIPTION') {
+      subject = 'Assinatura ativada';
+      body =
+        'O pagamento da assinatura foi confirmado e o plano já está ativo.';
+    } else if (purpose === 'CONTACT_UNLOCK') {
+      subject = 'Contato liberado';
+      body =
+        'O pagamento do desbloqueio foi confirmado. O contato do anunciante já está disponível.';
+    }
     const { emails } = await companyRecipients(context.prisma, companyId);
-    const title = deal?.listing.title ?? 'sua negociação';
     await Promise.all(
-      emails.map((email) =>
-        context.email.send(
-          email,
-          'Pagamento confirmado',
-          `O pagamento da negociação "${title}" foi confirmado. A coleta já pode ser agendada.`,
-        ),
-      ),
+      emails.map((email) => context.email.send(email, subject, body)),
     );
+  },
+
+  'deal.status.changed': async (payload, context) => {
+    const dealId = asString(payload.dealId);
+    const to = asString(payload.to);
+    if (!dealId || !to) return;
+    context.log(`Deal ${dealId} moved to ${to}`);
   },
 };
 

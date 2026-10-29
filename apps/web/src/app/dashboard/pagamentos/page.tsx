@@ -1,30 +1,40 @@
 'use client';
 
-import { ArrowLeft, CreditCard, Recycle } from 'lucide-react';
+import { CreditCard } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, Payment } from '../../../lib/api';
-import { SessionActions } from '../../../components/session-actions';
+import { api, isAuthenticationError, Payment } from '../../../lib/api';
+import { DashboardHeader } from '../../../components/dashboard-header';
 import { formatMoney } from '../../../lib/format';
+import {
+  label,
+  paymentProviderLabels,
+  paymentPurposeLabels,
+  paymentStatusLabels,
+} from '../../../lib/labels';
 
-const statusLabels: Record<string, string> = {
-  INITIATED: 'Iniciado',
-  PENDING: 'Aguardando pagamento',
-  PAID: 'Pago',
-  FAILED: 'Falhou',
-  CANCELLED: 'Cancelado',
-  REFUNDED: 'Estornado',
-};
+function paymentTitle(payment: Payment) {
+  if (payment.purpose === 'SUBSCRIPTION')
+    return `Plano ${payment.subscription?.plan.name ?? ''}`.trim();
+  if (payment.purpose === 'CONTACT_UNLOCK')
+    return payment.listing?.title ?? 'Desbloqueio de contato';
+  return payment.deal?.proposal.listing.title ?? 'Negociação';
+}
 
 export default function PaymentsPage() {
   const router = useRouter();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   useEffect(() => {
     api
       .payments()
       .then(({ payments: result }) => setPayments(result))
-      .catch(() => router.replace('/entrar?next=/dashboard/pagamentos'))
+      .catch((caught) => {
+        if (isAuthenticationError(caught))
+          router.replace('/entrar?next=/dashboard/pagamentos');
+        else setError('Não foi possível carregar os pagamentos.');
+      })
       .finally(() => setLoading(false));
   }, [router]);
   if (loading)
@@ -35,24 +45,20 @@ export default function PaymentsPage() {
     );
   return (
     <main className="dashboard-page">
-      <nav className="dashboard-nav shell">
-        <a className="brand" href="/">
-          <Recycle size={21} /> LOOP <span>AMBIENTAL</span>
-        </a>
-        <div className="dashboard-nav-actions">
-          <a className="back-link" href="/dashboard">
-            <ArrowLeft size={15} /> Voltar ao painel
-          </a>
-          <SessionActions mode="dashboard" />
-        </div>
-      </nav>
+      <DashboardHeader />
       <section className="dashboard-content shell">
         <p className="eyebrow">financeiro</p>
         <h1>Pagamentos</h1>
         <p className="dashboard-lede">
-          Acompanhe checkouts e pagamentos das suas negociações.
+          Acompanhe cobranças de negociações, assinaturas e desbloqueios de
+          contato da sua empresa.
         </p>
-        {payments.length === 0 ? (
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        {payments.length === 0 && !error ? (
           <div className="empty-panel favorite-empty">
             <CreditCard size={22} />
             <p>Nenhum pagamento iniciado.</p>
@@ -62,21 +68,32 @@ export default function PaymentsPage() {
             {payments.map((payment) => (
               <article className="favorite-card" key={payment.id}>
                 <div>
-                  <span className="dashboard-number">
-                    {statusLabels[payment.status] || payment.status}
+                  <span
+                    className={`status-badge status-${payment.status.toLowerCase()}`}
+                  >
+                    {label(paymentStatusLabels, payment.status)}
                   </span>
-                  <h2>{payment.deal.proposal.listing.title}</h2>
+                  <h2>{paymentTitle(payment)}</h2>
                   <p>
-                    {formatMoney(payment.amount, payment.currency)} ·{' '}
-                    {payment.provider}
+                    {label(paymentPurposeLabels, payment.purpose)} ·{' '}
+                    {formatMoney(payment.amount, payment.currency)}
                   </p>
                   <small>
+                    {label(paymentProviderLabels, payment.provider)} ·{' '}
                     {new Date(payment.createdAt).toLocaleString('pt-BR')}
                   </small>
                 </div>
                 {payment.checkoutUrl && payment.status === 'PENDING' && (
                   <a className="button small" href={payment.checkoutUrl}>
-                    Continuar
+                    Continuar pagamento
+                  </a>
+                )}
+                {payment.dealId && (
+                  <a
+                    className="text-link"
+                    href={`/dashboard/negociacoes/${payment.dealId}`}
+                  >
+                    Ver negociação
                   </a>
                 )}
               </article>

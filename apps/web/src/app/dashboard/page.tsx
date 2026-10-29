@@ -4,15 +4,20 @@ import { useEffect, useState } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
+  BarChart3,
   Bell,
   Bookmark,
   Building2,
+  Handshake,
   Heart,
   MessageCircle,
   Package,
+  Plug,
   Plus,
   Recycle,
   Search,
+  Settings,
+  Sparkles,
   Star,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -464,6 +469,15 @@ export default function DashboardPage() {
         )}
 
         <nav className="dashboard-shortcuts" aria-label="Atalhos do painel">
+          <a href="/dashboard/negociacoes">
+            <Handshake size={17} /> Negociações
+          </a>
+          <a href="/dashboard/recomendacoes">
+            <Sparkles size={17} /> Recomendações
+          </a>
+          <a href="/dashboard/relatorios">
+            <BarChart3 size={17} /> Relatórios
+          </a>
           <a href="/dashboard/favoritos">
             <Heart size={17} /> Favoritos
           </a>
@@ -490,6 +504,12 @@ export default function DashboardPage() {
           </a>
           <a href="/dashboard/avaliacoes">
             <Star size={17} /> Avaliações
+          </a>
+          <a href="/dashboard/integracoes">
+            <Plug size={17} /> Integrações e API
+          </a>
+          <a href="/dashboard/configuracoes">
+            <Settings size={17} /> Configurações
           </a>
         </nav>
       </section>

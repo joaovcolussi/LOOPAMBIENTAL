@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { ThemeToggle } from '../components/theme-toggle';
+import { DemoBanner } from '../components/demo-banner';
 import './styles.css';
+import './platform.css';
 
 export const metadata: Metadata = {
   title: 'LOOP AMBIENTAL | Marketplace B2B de resíduos industriais',
@@ -27,6 +29,7 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <DemoBanner />
         {children}
         <ThemeToggle />
       </body>

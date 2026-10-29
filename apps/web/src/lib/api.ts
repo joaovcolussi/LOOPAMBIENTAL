@@ -13,7 +13,9 @@ export function isAuthenticationError(error: unknown) {
   );
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export const apiBaseUrl = API_URL;
+
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     const method = init?.method?.toUpperCase() ?? 'GET';
@@ -557,9 +559,14 @@ export type CompanyReviews = {
   summary: { average: number; count: number };
   reviews: Review[];
 };
+export type PaymentPurpose = 'DEAL' | 'SUBSCRIPTION' | 'CONTACT_UNLOCK';
 export type Payment = {
   id: string;
-  dealId: string;
+  purpose: PaymentPurpose;
+  dealId: string | null;
+  subscriptionId: string | null;
+  listingId: string | null;
+  companyId: string;
   amount: string;
   currency: string;
   provider: string;
@@ -567,7 +574,89 @@ export type Payment = {
   checkoutUrl: string | null;
   paidAt: string | null;
   createdAt: string;
-  deal: { proposal: { listing: { title: string } } };
+  deal?: { proposal: { listing: { title: string } } } | null;
+  listing?: { title: string; slug: string } | null;
+  subscription?: { plan: { name: string } } | null;
+  company?: { legalName: string; tradeName: string | null };
+};
+export type PaymentRequired = { paymentRequired: true; payment: Payment };
+export type DealStatus =
+  | 'OPEN'
+  | 'AWAITING_DOCUMENTS'
+  | 'AWAITING_PAYMENT'
+  | 'AWAITING_PICKUP'
+  | 'IN_TRANSIT'
+  | 'DELIVERED'
+  | 'COMPLETED'
+  | 'DISPUTED'
+  | 'CANCELLED';
+export type DealAction =
+  | 'request-documents'
+  | 'confirm-documents'
+  | 'confirm-shipment'
+  | 'confirm-delivery'
+  | 'complete'
+  | 'dispute'
+  | 'cancel';
+type CompanyRef = {
+  id: string;
+  legalName: string;
+  tradeName: string | null;
+  slug: string | null;
+};
+export type DealSummary = {
+  id: string;
+  status: DealStatus;
+  side: 'BUYER' | 'SELLER';
+  createdAt: string;
+  updatedAt: string;
+  buyerCompanyId: string;
+  sellerCompanyId: string;
+  listing: {
+    id: string;
+    title: string;
+    slug: string;
+    unit: string;
+    type: string;
+  };
+  proposal: {
+    id: string;
+    quantity: string;
+    unitPrice: string;
+    currency: string;
+  };
+  buyerCompany: CompanyRef;
+  sellerCompany: CompanyRef;
+};
+export type DealDetail = DealSummary & {
+  availableActions: DealAction[];
+  statusHistory: DealStatusHistoryEntry[];
+  paymentTransactions: Pick<
+    Payment,
+    | 'id'
+    | 'amount'
+    | 'currency'
+    | 'status'
+    | 'provider'
+    | 'checkoutUrl'
+    | 'paidAt'
+    | 'createdAt'
+  >[];
+  logisticsRequests: {
+    id: string;
+    status: string;
+    origin: string;
+    destination: string;
+    createdAt: string;
+    shipment: { id: string; trackingCode: string; status: string } | null;
+  }[];
+  conversation: { id: string } | null;
+  reviews: { id: string; authorCompanyId: string; rating: number }[];
+};
+export type CursorPagination = {
+  pageSize: number;
+  hasMore: boolean;
+  nextCursor: string | null;
 };
 export type LogisticsRequest = {
   id: string;
@@ -930,10 +1019,20 @@ export const api = {
   companySubscription: (companyId: string) =>
     request<{
       subscription: CompanySubscription | null;
+      pending:
+        | (CompanySubscription & {
+            payments: Pick<
+              Payment,
+              'id' | 'amount' | 'checkoutUrl' | 'status'
+            >[];
+          })
+        | null;
       usage: SubscriptionUsage;
     }>(`/companies/${companyId}/subscription`),
   activateCompanySubscription: (companyId: string, planId: string) =>
-    request<CompanySubscription>(`/companies/${companyId}/subscription`, {
+    request<
+      CompanySubscription & { paymentRequired?: boolean; payment?: Payment }
+    >(`/companies/${companyId}/subscription`, {
       method: 'POST',
       body: JSON.stringify({ planId }),
     }),
@@ -942,10 +1041,13 @@ export const api = {
       method: 'DELETE',
     }),
   unlockListingContact: (listingId: string, companyId: string) =>
-    request<ContactUnlock>(`/listings/${listingId}/contact-unlock`, {
-      method: 'POST',
-      body: JSON.stringify({ companyId }),
-    }),
+    request<ContactUnlock | PaymentRequired>(
+      `/listings/${listingId}/contact-unlock`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ companyId }),
+      },
+    ),
   listingContactUnlockStatus: (listingId: string) =>
     request<{ unlocked: boolean; unlock: ContactUnlock | null }>(
       `/listings/${listingId}/contact-unlock`,
@@ -1327,4 +1429,39 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ token }),
     }),
+  paymentProvider: () =>
+    request<{ provider: 'SIMULATED' | 'MERCADO_PAGO' }>('/payments/provider'),
+  payment: (id: string) => request<{ payment: Payment }>(`/payments/${id}`),
+  simulatePayment: (id: string, outcome: 'approved' | 'rejected') =>
+    request<{ payment: Payment }>(`/payments/${id}/simulate`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome }),
+    }),
+  deals: (input?: { status?: string; cursor?: string; pageSize?: number }) =>
+    request<{
+      deals: DealSummary[];
+      countsByStatus: Partial<Record<DealStatus, number>>;
+      pagination: CursorPagination;
+    }>(`/deals${adminQuery(input)}`),
+  deal: (id: string) => request<{ deal: DealDetail }>(`/deals/${id}`),
+  dealAction: (id: string, action: DealAction, reason?: string) =>
+    request<{ deal: DealDetail }>(`/deals/${id}/${action}`, {
+      method: 'POST',
+      body: JSON.stringify(reason ? { reason } : {}),
+    }),
+  adminDisputes: () =>
+    request<{ deals: DealSummary[] }>('/admin/deals/disputes'),
+  resolveDispute: (
+    id: string,
+    resolution: 'complete' | 'cancel',
+    notes?: string,
+  ) =>
+    request<{ id: string; status: DealStatus }>(
+      `/admin/deals/${id}/resolve-dispute`,
+      {
+        method: 'POST',
+        headers: { 'X-Admin-Action': '1' },
+        body: JSON.stringify({ resolution, notes }),
+      },
+    ),
 };

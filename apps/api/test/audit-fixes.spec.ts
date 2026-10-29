@@ -164,6 +164,7 @@ describe('PaymentsService.handleWebhook', () => {
       paymentTransaction: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'tx-id',
+          purpose: 'DEAL',
           dealId: 'deal-id',
           companyId: 'buyer-id',
           deal: { status: 'COMPLETED' },

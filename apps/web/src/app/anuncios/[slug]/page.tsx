@@ -120,11 +120,21 @@ export default function ListingDetailPage() {
     setUnlocking(true);
     setContactError('');
     try {
-      await api.unlockListingContact(listing.id, targetCompany);
+      const result = await api.unlockListingContact(listing.id, targetCompany);
+      if ('paymentRequired' in result && result.payment.checkoutUrl) {
+        // One-time unlocks without plan quota are charged first.
+        window.location.assign(result.payment.checkoutUrl);
+        return;
+      }
       const { listing: refreshed } = await api.listingBySlug(listing.slug);
       setListing(refreshed);
-    } catch {
-      setContactError('Não foi possível desbloquear o contato.');
+    } catch (caught) {
+      setContactError(
+        caught instanceof Error &&
+          caught.message === 'CONTACT_UNLOCK_OWN_LISTING'
+          ? 'Este anúncio pertence à sua empresa.'
+          : 'Não foi possível desbloquear o contato.',
+      );
     } finally {
       setUnlocking(false);
     }
@@ -479,7 +489,9 @@ export default function ListingDetailPage() {
                 </strong>
                 <p>
                   Desbloqueie o contato para ver responsável, e-mail, telefone e
-                  endereço comercial desta empresa.
+                  endereço comercial desta empresa. O desbloqueio usa a cota do
+                  seu plano ou é cobrado de forma avulsa (pagamento simulado no
+                  ambiente de demonstração).
                 </p>
                 {contactError && (
                   <p className="form-error" role="alert">

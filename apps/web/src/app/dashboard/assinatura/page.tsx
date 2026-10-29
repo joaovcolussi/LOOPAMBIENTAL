@@ -37,6 +37,10 @@ export default function SubscriptionPage() {
     null,
   );
   const [usage, setUsage] = useState<SubscriptionUsage | null>(null);
+  const [pending, setPending] = useState<{
+    planName: string;
+    checkoutUrl: string | null;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState('');
   const [error, setError] = useState('');
@@ -74,6 +78,7 @@ export default function SubscriptionPage() {
     if (!companyId) {
       setSubscription(null);
       setUsage(null);
+      setPending(null);
       return;
     }
     let active = true;
@@ -83,6 +88,14 @@ export default function SubscriptionPage() {
         if (!active) return;
         setSubscription(result.subscription);
         setUsage(result.usage);
+        setPending(
+          result.pending
+            ? {
+                planName: result.pending.plan.name,
+                checkoutUrl: result.pending.payments[0]?.checkoutUrl ?? null,
+              }
+            : null,
+        );
       })
       .catch(() => {
         if (active) setError('Não foi possível carregar a assinatura.');
@@ -99,12 +112,21 @@ export default function SubscriptionPage() {
     setNotice('');
     try {
       const updated = await api.activateCompanySubscription(companyId, plan.id);
+      if (updated.paymentRequired && updated.payment?.checkoutUrl) {
+        setNotice('Redirecionando para o pagamento do plano...');
+        window.location.assign(updated.payment.checkoutUrl);
+        return;
+      }
       setSubscription(updated);
       const refreshed = await api.companySubscription(companyId);
       setUsage(refreshed.usage);
       setNotice(`Plano ${plan.name} ativado.`);
-    } catch {
-      setError('Não foi possível ativar o plano. Verifique sua permissão.');
+    } catch (caught) {
+      setError(
+        caught instanceof Error && caught.message === 'PLAN_ALREADY_ACTIVE'
+          ? 'Este já é o plano ativo da empresa.'
+          : 'Não foi possível ativar o plano. Verifique sua permissão.',
+      );
     } finally {
       setSaving('');
     }
@@ -164,6 +186,19 @@ export default function SubscriptionPage() {
           <p className="form-note" role="status">
             {notice}
           </p>
+        )}
+        {pending && (
+          <div className="admin-panel pending-checkout" role="status">
+            <p>
+              O plano <strong>{pending.planName}</strong> aguarda pagamento. Ele
+              será ativado assim que a cobrança for aprovada.
+            </p>
+            {pending.checkoutUrl && (
+              <a className="button small" href={pending.checkoutUrl}>
+                Concluir pagamento
+              </a>
+            )}
+          </div>
         )}
         {companies.length === 0 ? (
           <div className="empty-panel">

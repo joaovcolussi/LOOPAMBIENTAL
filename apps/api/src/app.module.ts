@@ -8,6 +8,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaService } from './infrastructure/prisma.service';
 import { OutboxService } from './infrastructure/outbox.service';
+import { RealtimeService } from './infrastructure/realtime.service';
 import { ListingsController } from './modules/listings/listings.controller';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
@@ -90,6 +91,12 @@ import {
   ReviewsController,
 } from './modules/reviews/reviews.controller';
 import { ReviewsService } from './modules/reviews/reviews.service';
+import { RealtimeController } from './modules/realtime/realtime.controller';
+import {
+  AdminDealsController,
+  DealsController,
+} from './modules/deals/deals.controller';
+import { DealsService } from './modules/deals/deals.service';
 
 @Controller('health')
 class HealthController {
@@ -157,11 +164,15 @@ class HealthController {
     DealReviewsController,
     ReviewsController,
     PublicCompanyReviewsController,
+    RealtimeController,
+    DealsController,
+    AdminDealsController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     PrismaService,
     OutboxService,
+    RealtimeService,
     AuthService,
     EmailService,
     AuthGuard,
@@ -190,6 +201,7 @@ class HealthController {
     SubscriptionsService,
     ContactUnlocksService,
     ReviewsService,
+    DealsService,
   ],
 })
 export class AppModule {}
