@@ -4,7 +4,7 @@ Marketplace B2B para comprar e vender resíduos, recicláveis, sucatas e materia
 reaproveitáveis. Os comandos abaixo são iguais no **Windows** (PowerShell ou
 CMD) e no **Linux** (ou macOS).
 
-## Rodar em outra máquina (5 minutos)
+## Rodar em outra máquina (cerca de 5 minutos)
 
 ### 1. Instale uma vez
 
@@ -28,12 +28,17 @@ corepack pnpm install
 corepack pnpm start
 ```
 
-Abra **http://localhost:3000** e crie sua conta em `/cadastro`.
+Abra **http://localhost:3000** e entre com uma das
+[contas de demonstração](#3-usar-as-contas-de-demonstração) ou crie sua conta em
+`/cadastro`. Contas novas precisam confirmar o e-mail: o link chega no Mailpit,
+em **http://localhost:8025**.
 
 O `start` faz tudo sozinho: cria o `.env` (com chave de criptografia própria),
-sobe MySQL, Redis, MinIO e Mailpit, aplica as migrações e inicia API, Web e
-Worker com recarga automática. `Ctrl+C` encerra os apps; `corepack pnpm stop`
-para os containers (os dados ficam salvos).
+sobe MySQL, Redis, MinIO e Mailpit, aplica as migrações, carrega os dados de
+demonstração e inicia API, Web e Worker com recarga automática. Na primeira vez
+ele também baixa as imagens dos containers (cerca de 1 GB), o que pode levar
+alguns minutos a mais. `Ctrl+C` encerra os apps; `corepack pnpm stop` para os
+containers (os dados ficam salvos).
 
 > No Windows, se `corepack enable` pedir permissão, abra o terminal como
 > administrador só para esse comando.
@@ -55,7 +60,7 @@ feita. Senha de todas as contas: `Demo@12345`.
 | `diego@horizonte.demo`         | Construtora Horizonte (não verificada)     |
 
 Para recarregar só os dados: `corepack pnpm db:demo` (idempotente). Para não
-carregá-los no `start`, defina `DEMO_SEED=false`.
+carregá-los no `start`, defina `DEMO_SEED=false` no `.env`.
 
 Fluxo completo para testar: proposta → aceite → **Negociações** → _Pagar_ →
 checkout simulado (_Aprovar pagamento_) → **Logística** → _Gerar cotações

@@ -163,10 +163,27 @@ function migrate() {
   pnpm(['--filter', '@loopambiental/database', 'db:deploy']);
 }
 
+// Lê uma variável do .env (a variável do terminal, se definida, prevalece).
+function envSetting(name) {
+  if (process.env[name] !== undefined) return process.env[name];
+  const envPath = join(rootDir, '.env');
+  if (!existsSync(envPath)) return undefined;
+  const line = readFileSync(envPath, 'utf8')
+    .split(/\r?\n/)
+    .find((entry) => entry.trim().startsWith(`${name}=`));
+  return line
+    ?.slice(line.indexOf('=') + 1)
+    .trim()
+    .replace(/^(['"])(.*)\1$/, '$2');
+}
+
 // O ambiente é de estudo/demonstração: popula dados fictícios (idempotente),
-// a menos que DEMO_SEED=false.
+// a menos que DEMO_SEED=false (no .env ou no terminal).
 function seedDemo() {
-  if (process.env.DEMO_SEED === 'false') return;
+  if (envSetting('DEMO_SEED') === 'false') {
+    log('DEMO_SEED=false: dados de demonstração não carregados.');
+    return;
+  }
   log('Carregando dados de demonstração (pnpm db:demo)...');
   pnpm(['--filter', '@loopambiental/database', 'db:demo']);
 }

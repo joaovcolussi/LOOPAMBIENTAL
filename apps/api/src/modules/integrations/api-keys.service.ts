@@ -106,9 +106,13 @@ export class ApiKeysService {
         revokedAt: true,
         lastUsedAt: true,
         company: { select: { status: true } },
+        createdBy: { select: { status: true } },
       },
     });
     if (!key || key.revokedAt || key.company.status === 'BLOCKED') return null;
+    // Same user-state rule as sessions: a deleted or blocked creator's keys
+    // stop working.
+    if (key.createdBy.status !== 'ACTIVE') return null;
     // The key acts on behalf of its creator, who must still be a member.
     const membership = await this.prisma.companyMember.findUnique({
       where: {

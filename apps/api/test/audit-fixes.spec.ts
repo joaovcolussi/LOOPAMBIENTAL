@@ -78,7 +78,7 @@ describe('ConversationsService access', () => {
           },
         ],
       },
-      select: { id: true },
+      select: expect.objectContaining({ id: true }),
     });
     expect(prisma.message.findMany).not.toHaveBeenCalled();
   });

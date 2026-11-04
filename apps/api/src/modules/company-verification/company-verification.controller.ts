@@ -21,6 +21,7 @@ import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { AuthenticatedMutationGuard } from '../auth/authenticated-mutation.guard';
 import { AdminMutationGuard } from '../auth/admin-mutation.guard';
 import { ModerationGuard } from '../auth/moderation.guard';
+import { staffMfaSatisfied } from '../auth/admin.guard';
 import { CompanyVerificationService } from './company-verification.service';
 
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
@@ -73,7 +74,9 @@ export class CompanyDocumentController {
   ) {
     const document = await this.service.readDocument(
       request.user.id,
-      request.user.platformRole,
+      // Reviewer access to other companies' documents follows the staff MFA
+      // policy; without it the user is treated as a regular member.
+      staffMfaSatisfied(request.user) ? request.user.platformRole : 'USER',
       id,
       documentId,
     );

@@ -5,7 +5,11 @@ import { api, AdminPaymentRow } from '../../../lib/api';
 import { AdminNav } from '../../../components/admin-nav';
 import { TableLoadingRow } from '../../../components/table-loading-row';
 import { formatMoney } from '../../../lib/format';
-import { paymentStatusLabels } from '../../../lib/labels';
+import {
+  label,
+  paymentPurposeLabels,
+  paymentStatusLabels,
+} from '../../../lib/labels';
 
 export default function AdminPaymentsPage() {
   const [payments, setPayments] = useState<AdminPaymentRow[]>([]);
@@ -109,7 +113,8 @@ export default function AdminPaymentsPage() {
               {payments.map((payment) => (
                 <tr key={payment.id}>
                   <td>
-                    {payment.deal.proposal.listing.title}
+                    {payment.deal?.proposal.listing.title ??
+                      label(paymentPurposeLabels, payment.purpose)}
                     <small>{payment.provider}</small>
                   </td>
                   <td>

@@ -55,7 +55,8 @@ export default function AdminDisputesPage() {
         <h1>Disputas de negociação</h1>
         <p className="dashboard-lede">
           Negociações em disputa aguardando decisão da plataforma. A decisão
-          conclui ou cancela a negociação e devolve o estoque quando cancelada.
+          conclui ou cancela a negociação; ao cancelar, o pagamento é marcado
+          para reembolso e o estoque não volta à venda automaticamente.
         </p>
         {error && (
           <p className="form-error" role="alert">

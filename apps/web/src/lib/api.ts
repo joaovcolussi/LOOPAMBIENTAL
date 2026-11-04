@@ -484,7 +484,8 @@ export type AdminListingRow = {
 };
 export type AdminPaymentRow = {
   id: string;
-  dealId: string;
+  dealId: string | null;
+  purpose: string;
   provider: string;
   externalId: string | null;
   amount: string;
@@ -493,11 +494,12 @@ export type AdminPaymentRow = {
   paidAt: string | null;
   createdAt: string;
   company: { id: string; legalName: string; tradeName: string | null };
+  // Subscription and contact-unlock charges have no deal.
   deal: {
     id: string;
     status: string;
     proposal: { listing: { id: string; title: string } };
-  };
+  } | null;
 };
 export type AdminPlan = {
   id: string;

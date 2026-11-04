@@ -212,7 +212,7 @@ export class ConversationsService {
     conversationId: string,
     body: string,
   ): Promise<unknown> {
-    await this.assertParticipant(userId, conversationId);
+    const conversation = await this.assertParticipant(userId, conversationId);
     const normalizedBody = body.trim();
     if (normalizedBody.length < 1 || normalizedBody.length > 5000)
       throw new BadRequestException('INVALID_MESSAGE');
@@ -230,8 +230,20 @@ export class ConversationsService {
       where: { id: conversationId },
       data: { updatedAt: new Date() },
     });
+    // Same rule as reads: participants removed from both companies keep their
+    // row for history but must not receive new messages.
+    const sideCompanyIds = [
+      conversation.listing?.companyId,
+      conversation.proposal?.proposerCompanyId,
+    ].filter((id): id is string => Boolean(id));
     const recipients = await this.prisma.conversationParticipant.findMany({
-      where: { conversationId, userId: { not: userId } },
+      where: {
+        conversationId,
+        userId: { not: userId },
+        user: {
+          memberships: { some: { companyId: { in: sideCompanyIds } } },
+        },
+      },
       select: { userId: true },
     });
     for (const participantId of [userId, ...recipients.map((r) => r.userId)])
@@ -268,9 +280,14 @@ export class ConversationsService {
         participants: { some: { userId } },
         ...currentMemberOfEitherSide(userId),
       },
-      select: { id: true },
+      select: {
+        id: true,
+        listing: { select: { companyId: true } },
+        proposal: { select: { proposerCompanyId: true } },
+      },
     });
     if (!conversation)
       throw new ForbiddenException('CONVERSATION_ACCESS_DENIED');
+    return conversation;
   }
 }

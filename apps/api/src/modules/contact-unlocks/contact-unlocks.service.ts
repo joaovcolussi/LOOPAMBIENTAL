@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
-import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import {
+  quotaWindowStart,
+  SubscriptionsService,
+} from '../subscriptions/subscriptions.service';
 import { PaymentsService } from '../payments/payments.service';
 
 export const CONTACT_UNLOCK_PRICE_SETTING = 'contact_unlock_price';
@@ -141,7 +144,7 @@ export class ContactUnlocksService {
       subscription.plan.features,
     );
     if (limit === -1 || limit === null) return 'PLAN';
-    const since = subscription.currentPeriodStart ?? subscription.createdAt;
+    const since = quotaWindowStart(subscription);
     const used = await this.prisma.contactUnlock.count({
       where: { companyId, source: 'PLAN', createdAt: { gte: since } },
     });

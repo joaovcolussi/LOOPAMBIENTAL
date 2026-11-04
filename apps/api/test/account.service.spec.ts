@@ -20,6 +20,7 @@ async function setup(overrides: Record<string, unknown> = {}) {
     favorite: { deleteMany: jest.fn() },
     savedSearch: { deleteMany: jest.fn() },
     notification: { deleteMany: jest.fn() },
+    apiKey: { updateMany: jest.fn() },
     dataRequest: { create: jest.fn() },
     auditLog: { create: jest.fn() },
     $transaction: jest.fn().mockResolvedValue([]),
@@ -85,6 +86,10 @@ describe('AccountService.deleteAccount', () => {
     });
     expect(prisma.session.deleteMany).toHaveBeenCalledWith({
       where: { userId: 'u' },
+    });
+    expect(prisma.apiKey.updateMany).toHaveBeenCalledWith({
+      where: { createdByUserId: 'u', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
     });
   });
 });

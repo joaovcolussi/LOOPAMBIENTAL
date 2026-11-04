@@ -1,3 +1,4 @@
+import { deflateSync } from 'node:zlib';
 import { SignatureScanner } from '../src/infrastructure/file-scanner';
 import { MetricsService } from '../src/infrastructure/observability/metrics.service';
 import { redact } from '../src/infrastructure/observability/json-logger';
@@ -31,6 +32,48 @@ describe('SignatureScanner', () => {
     await expect(
       scanner.scan(Buffer.from('%PDF-1.7\n1 0 obj << /Type /Catalog >>')),
     ).resolves.toMatchObject({ clean: true });
+  });
+
+  it('scans adversarial input in linear time', async () => {
+    const started = Date.now();
+    await expect(
+      scanner.scan(Buffer.from(`%PDF-${'/OpenAction<<'.repeat(200_000)}`)),
+    ).resolves.toMatchObject({ clean: true });
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('ignores name-like bytes inside stream data', async () => {
+    const pdf = Buffer.concat([
+      Buffer.from(
+        '%PDF-1.7\n4 0 obj << /Length 8 /Filter /FlateDecode >>\nstream\n',
+      ),
+      // "/JS " by chance inside compressed bytes.
+      Buffer.from([0x9c, 0x2f, 0x4a, 0x53, 0x20, 0x07, 0x2f, 0x4a]),
+      Buffer.from('\nendstream\nendobj\n'),
+    ]);
+    await expect(scanner.scan(pdf)).resolves.toMatchObject({ clean: true });
+  });
+
+  it('decodes hex-escaped names and inflates object streams', async () => {
+    await expect(
+      scanner.scan(
+        Buffer.from('%PDF-1.7\n1 0 obj << /OpenAction << /S /J#53 (x) >> >>'),
+      ),
+    ).resolves.toMatchObject({ clean: false, signature: 'PDF-Active-Content' });
+    const objects = deflateSync(
+      Buffer.from('<< /OpenAction << /S /JavaScript /JS (app.alert(1)) >> >>'),
+    );
+    const pdf = Buffer.concat([
+      Buffer.from(
+        `%PDF-1.7\n5 0 obj << /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /Length ${objects.length} >>\nstream\n`,
+      ),
+      objects,
+      Buffer.from('\nendstream\nendobj\n'),
+    ]);
+    await expect(scanner.scan(pdf)).resolves.toMatchObject({
+      clean: false,
+      signature: 'PDF-Active-Content',
+    });
   });
 });
 

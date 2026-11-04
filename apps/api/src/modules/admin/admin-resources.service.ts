@@ -291,6 +291,7 @@ export class AdminResourcesService {
           select: {
             id: true,
             dealId: true,
+            purpose: true,
             provider: true,
             externalId: true,
             amount: true,

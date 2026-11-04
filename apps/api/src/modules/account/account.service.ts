@@ -422,6 +422,10 @@ export class AccountService {
       this.prisma.favorite.deleteMany({ where: { userId } }),
       this.prisma.savedSearch.deleteMany({ where: { userId } }),
       this.prisma.notification.deleteMany({ where: { userId } }),
+      this.prisma.apiKey.updateMany({
+        where: { createdByUserId: userId, revokedAt: null },
+        data: { revokedAt: now },
+      }),
       this.prisma.user.update({
         where: { id: userId },
         data: {

@@ -57,6 +57,7 @@ export const listingReasonLabels: Record<string, string> = {
   LISTING_PAUSED: 'Anúncio pausado',
   LISTING_CLOSED: 'Anúncio encerrado',
   PROPOSAL_ACCEPTED: 'Proposta aceita — reservado',
+  LISTING_EDITED_IN_NEGOTIATION: 'Editado em negociação — será revisado',
 };
 
 export const proposalStatusLabels: Record<string, string> = {

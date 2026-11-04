@@ -1,4 +1,7 @@
-import { SubscriptionsService } from '../src/modules/subscriptions/subscriptions.service';
+import {
+  quotaWindowStart,
+  SubscriptionsService,
+} from '../src/modules/subscriptions/subscriptions.service';
 
 function makeService(prisma: unknown, notifications?: unknown) {
   return new SubscriptionsService(
@@ -34,6 +37,7 @@ describe('SubscriptionsService', () => {
           name: 'Essencial',
         }),
       },
+      subscription: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((callback) => callback(transaction)),
     };
     const service = makeService(prisma, notifications);
@@ -50,6 +54,55 @@ describe('SubscriptionsService', () => {
     expect(notifications.create).toHaveBeenCalledWith(
       'owner-1',
       expect.objectContaining({ type: 'SYSTEM' }),
+    );
+  });
+
+  it('refuses to re-activate the free plan that is already active', async () => {
+    const prisma = {
+      companyMember: {
+        findUnique: jest.fn().mockResolvedValue({ role: 'OWNER' }),
+      },
+      plan: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'free-plan',
+          code: 'gratuito',
+          name: 'Gratuito',
+          priceMonthly: '0.00',
+        }),
+      },
+      subscription: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'subscription-id',
+          status: 'ACTIVE',
+          plan: { id: 'free-plan' },
+        }),
+      },
+      $transaction: jest.fn(),
+    };
+    const service = makeService(prisma);
+
+    await expect(
+      service.activate('user-id', 'company-id', 'free-plan'),
+    ).rejects.toThrow('PLAN_ALREADY_ACTIVE');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('counts free-plan unlocks over a rolling window, paid ones per period', () => {
+    const periodStart = new Date('2026-01-01T00:00:00.000Z');
+    expect(
+      quotaWindowStart({
+        currentPeriodStart: periodStart,
+        createdAt: periodStart,
+        plan: { priceMonthly: '149.90' },
+      }),
+    ).toEqual(periodStart);
+    const freeWindow = quotaWindowStart({
+      currentPeriodStart: new Date(),
+      createdAt: new Date(),
+      plan: { priceMonthly: '0.00' },
+    });
+    expect(Date.now() - freeWindow.getTime()).toBeGreaterThanOrEqual(
+      30 * 24 * 60 * 60 * 1000 - 1000,
     );
   });
 

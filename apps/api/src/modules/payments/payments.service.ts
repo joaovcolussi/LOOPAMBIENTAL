@@ -338,15 +338,25 @@ export class PaymentsService {
       ...providerMetadata,
     };
     const settled = await this.prisma.$transaction(async (tx) => {
+      // Only charges still awaiting the provider can settle. A charge the
+      // platform cancelled (deal cancelled, checkout superseded) never turns
+      // PAID again: a late approval is flagged for refund instead.
       const claimed = await tx.paymentTransaction.updateMany({
-        where: { id: transaction.id, status: { not: 'PAID' } },
+        where: {
+          id: transaction.id,
+          status: { in: ['INITIATED', 'PENDING', 'FAILED'] },
+        },
         data: {
           status,
           metadata: metadata as Prisma.InputJsonObject,
           ...(status === 'PAID' ? { paidAt: new Date() } : {}),
         },
       });
-      if (claimed.count === 0) return false;
+      if (claimed.count === 0) {
+        if (status === 'PAID')
+          await this.flagLateApproval(tx, transaction.id, metadata);
+        return false;
+      }
       if (status !== 'PAID') return false;
       if (transaction.purpose === 'DEAL' && transaction.dealId)
         await this.applyDealPayment(tx, transaction.dealId, transaction.deal);
@@ -392,6 +402,36 @@ export class PaymentsService {
         payload: { paymentId: transaction.id },
       });
     return settled;
+  }
+
+  /**
+   * The provider captured money for a charge the platform had already
+   * cancelled: nothing is applied, and the charge is marked for a refund so
+   * finance can act on it.
+   */
+  private async flagLateApproval(
+    tx: Prisma.TransactionClient,
+    transactionId: string,
+    metadata: Record<string, unknown>,
+  ) {
+    const flagged = await tx.paymentTransaction.updateMany({
+      where: { id: transactionId, status: 'CANCELLED' },
+      data: {
+        metadata: {
+          ...metadata,
+          refundRequired: 'true',
+        } as Prisma.InputJsonObject,
+      },
+    });
+    if (flagged.count === 0) return;
+    await tx.auditLog.create({
+      data: {
+        action: 'PAYMENT_APPROVED_AFTER_CANCELLATION',
+        resourceType: 'PAYMENT_TRANSACTION',
+        resourceId: transactionId,
+        metadata: { refundRequired: true },
+      },
+    });
   }
 
   private async openCheckout(id: string, title: string, amount: string) {
