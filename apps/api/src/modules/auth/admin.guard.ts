@@ -6,6 +6,14 @@ import {
 } from '@nestjs/common';
 import { AuthenticatedRequest } from './auth.guard';
 
+/**
+ * REQUIRE_ADMIN_MFA covers every staff surface (admin, moderation and
+ * reviewer document access), not only the /admin routes.
+ */
+export function staffMfaSatisfied(user: { mfaEnabledAt?: Date | null }) {
+  return process.env.REQUIRE_ADMIN_MFA !== 'true' || Boolean(user.mfaEnabledAt);
+}
+
 @Injectable()
 export class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext) {
@@ -23,7 +31,7 @@ export class AdminGuard implements CanActivate {
       throw new ForbiddenException('PLATFORM_ADMIN_REQUIRED');
     // Production deployments enforce MFA for administrators; the demo
     // environment keeps it optional so the walkthrough stays simple.
-    if (process.env.REQUIRE_ADMIN_MFA === 'true' && !request.user.mfaEnabledAt)
+    if (!staffMfaSatisfied(request.user))
       throw new ForbiddenException('ADMIN_MFA_REQUIRED');
     return true;
   }

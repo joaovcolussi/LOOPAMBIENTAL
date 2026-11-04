@@ -95,8 +95,14 @@ const requestInclude = {
 } as const;
 
 export function demoFeaturesEnabled() {
-  return process.env.DEMO_MODE !== 'false';
+  // Demo helpers are opt-in in production: only an explicit DEMO_MODE turns
+  // them on there.
+  if (process.env.DEMO_MODE) return process.env.DEMO_MODE !== 'false';
+  return process.env.NODE_ENV !== 'production';
 }
+
+/** Which deal sides an actor speaks for when shipment events move the deal. */
+type DealSides = { buyer: boolean; seller: boolean };
 
 @Injectable()
 export class LogisticsService {
@@ -320,7 +326,29 @@ export class LogisticsService {
       },
     });
     if (!shipment) throw new NotFoundException('SHIPMENT_NOT_FOUND');
-    await this.getRequestForMember(userId, shipment.logisticsRequest.id);
+    const request = await this.getRequestForMember(
+      userId,
+      shipment.logisticsRequest.id,
+    );
+    // A participant may only make the deal transition their own side owns:
+    // the seller confirms shipment, the buyer confirms delivery.
+    const memberships = await this.prisma.companyMember.findMany({
+      where: {
+        userId,
+        companyId: {
+          in: [request.deal.buyerCompanyId, request.deal.sellerCompanyId],
+        },
+      },
+      select: { companyId: true },
+    });
+    const sides: DealSides = {
+      buyer: memberships.some(
+        (membership) => membership.companyId === request.deal.buyerCompanyId,
+      ),
+      seller: memberships.some(
+        (membership) => membership.companyId === request.deal.sellerCompanyId,
+      ),
+    };
     const next: Partial<Record<ShipmentStatus, ShipmentStatus>> = {
       SCHEDULED: 'PICKED_UP',
       PICKED_UP: 'IN_TRANSIT',
@@ -328,16 +356,23 @@ export class LogisticsService {
     };
     const status = next[shipment.status];
     if (!status) throw new BadRequestException('SHIPMENT_FINISHED');
-    return this.advanceShipment(userId, shipmentId, {
-      status,
-      location: status === 'IN_TRANSIT' ? 'Centro de distribuição (demo)' : '',
-    });
+    return this.advanceShipment(
+      userId,
+      shipmentId,
+      {
+        status,
+        location:
+          status === 'IN_TRANSIT' ? 'Centro de distribuição (demo)' : '',
+      },
+      sides,
+    );
   }
 
   private async advanceShipment(
     userId: string,
     shipmentId: string,
     input: EventInput,
+    sides: DealSides = { buyer: true, seller: true },
   ) {
     const shipment = await this.prisma.shipment.findUnique({
       where: { id: shipmentId },
@@ -397,7 +432,7 @@ export class LogisticsService {
                 : 'IN_TRANSIT',
         },
       });
-      await this.syncDeal(tx, deal, status, userId);
+      await this.syncDeal(tx, deal, status, userId, sides);
     });
     await this.notifications?.create(
       shipment.logisticsRequest.requestedByUserId,
@@ -420,20 +455,26 @@ export class LogisticsService {
     deal: { id: string; status: DealStatus },
     shipmentStatus: ShipmentStatus,
     userId: string,
+    sides: DealSides,
   ) {
+    // Mirrors DEAL_TRANSITIONS: confirm-shipment is the seller's action and
+    // confirm-delivery the buyer's.
     const transition: {
       from: DealStatus;
       to: DealStatus;
       note: string;
     } | null =
       (shipmentStatus === 'PICKED_UP' || shipmentStatus === 'IN_TRANSIT') &&
-      deal.status === 'AWAITING_PICKUP'
+      deal.status === 'AWAITING_PICKUP' &&
+      sides.seller
         ? {
             from: 'AWAITING_PICKUP',
             to: 'IN_TRANSIT',
             note: 'SHIPMENT_CONFIRMED',
           }
-        : shipmentStatus === 'DELIVERED' && deal.status === 'IN_TRANSIT'
+        : shipmentStatus === 'DELIVERED' &&
+            deal.status === 'IN_TRANSIT' &&
+            sides.buyer
           ? { from: 'IN_TRANSIT', to: 'DELIVERED', note: 'DELIVERY_CONFIRMED' }
           : null;
     if (!transition) return;

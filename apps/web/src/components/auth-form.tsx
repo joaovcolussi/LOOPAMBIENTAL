@@ -29,13 +29,15 @@ export function AuthForm({ mode }: AuthFormProps) {
     const requestedNext = new URLSearchParams(window.location.search).get(
       'next',
     );
-    // Only allow same-site relative paths to avoid open redirects.
-    const next =
-      requestedNext &&
-      requestedNext.startsWith('/') &&
-      !requestedNext.startsWith('//')
-        ? requestedNext
-        : null;
+    // Only allow same-origin paths to avoid open redirects. Resolving through
+    // URL catches tricks such as "/\host" or tab characters that a prefix
+    // check misses.
+    let next: string | null = null;
+    if (requestedNext?.startsWith('/')) {
+      const resolved = new URL(requestedNext, window.location.origin);
+      if (resolved.origin === window.location.origin)
+        next = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    }
     router.push(
       next ||
         (mode === 'login' &&

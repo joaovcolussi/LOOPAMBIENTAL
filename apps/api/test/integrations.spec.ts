@@ -69,6 +69,27 @@ describe('ApiKeysService', () => {
     await expect(service.authenticate('la_demo_abc')).resolves.toBeNull();
     await expect(service.authenticate('outra-chave')).resolves.toBeNull();
   });
+
+  it('does not authenticate keys whose creator deleted the account', async () => {
+    const prisma = {
+      apiKey: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'k',
+          companyId: 'c',
+          createdByUserId: 'u',
+          revokedAt: null,
+          company: { status: 'ACTIVE' },
+          createdBy: { status: 'DELETED' },
+        }),
+      },
+      companyMember: {
+        findUnique: jest.fn().mockResolvedValue({ role: 'ADMIN' }),
+      },
+    };
+    const service = new ApiKeysService(prisma as never);
+    await expect(service.authenticate('la_demo_abc')).resolves.toBeNull();
+    expect(prisma.companyMember.findUnique).not.toHaveBeenCalled();
+  });
 });
 
 describe('IntegrationsService.importListingsCsv', () => {

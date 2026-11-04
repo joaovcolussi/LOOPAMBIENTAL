@@ -7,14 +7,23 @@ function setup(deal: Record<string, unknown> | null, memberOf: string[]) {
       count: jest.fn().mockResolvedValue(0),
     },
     dealStatusHistory: { create: jest.fn() },
-    paymentTransaction: { updateMany: jest.fn() },
+    paymentTransaction: {
+      updateMany: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      update: jest.fn(),
+    },
     listing: {
       update: jest.fn(),
       findUnique: jest
         .fn()
         .mockResolvedValue({ status: 'NEGOTIATING', availableQuantity: '10' }),
     },
-    listingStatusHistory: { create: jest.fn() },
+    listingStatusHistory: {
+      create: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
+    moderationCase: { create: jest.fn() },
+    auditLog: { create: jest.fn() },
     outboxEvent: { create: jest.fn() },
   };
   const prisma = {
@@ -114,12 +123,55 @@ describe('DealsService.transition', () => {
     });
   });
 
+  it('sends a listing edited during the negotiation back to review', async () => {
+    const { service, tx } = setup({ status: 'OPEN' }, ['seller-co']);
+    tx.listingStatusHistory.findFirst.mockResolvedValue({
+      reason: 'LISTING_EDITED_IN_NEGOTIATION',
+    });
+    await service.transition('u', 'deal-1', 'cancel', 'sem frete');
+    expect(tx.listing.update).toHaveBeenCalledWith({
+      where: { id: 'listing-1' },
+      data: { status: 'PENDING_REVIEW', publishedAt: null },
+    });
+    expect(tx.moderationCase.create).toHaveBeenCalledWith({
+      data: { listingId: 'listing-1' },
+    });
+  });
+
   it('fails on a concurrent status change', async () => {
     const { service, tx } = setup({ status: 'DELIVERED' }, ['buyer-co']);
     tx.deal.updateMany.mockResolvedValue({ count: 0 });
     await expect(service.transition('u', 'deal-1', 'complete')).rejects.toThrow(
       'DEAL_STATUS_CHANGED',
     );
+  });
+});
+
+describe('DealsService.resolveDispute', () => {
+  it('cancelling keeps the stock off sale and flags the charge for refund', async () => {
+    const { service, tx } = setup({ status: 'DISPUTED' }, []);
+    tx.paymentTransaction.findMany.mockResolvedValue([
+      { id: 'pay-1', metadata: { mercadoPagoStatus: 'approved' } },
+    ]);
+    await service.resolveDispute('admin', 'deal-1', 'cancel', 'produto');
+    expect(tx.listing.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { availableQuantity: expect.anything() },
+      }),
+    );
+    expect(tx.paymentTransaction.update).toHaveBeenCalledWith({
+      where: { id: 'pay-1' },
+      data: {
+        metadata: { mercadoPagoStatus: 'approved', refundRequired: 'true' },
+      },
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        metadata: expect.objectContaining({
+          refundRequiredPaymentIds: ['pay-1'],
+        }),
+      }),
+    });
   });
 });
 

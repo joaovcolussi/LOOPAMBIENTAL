@@ -83,6 +83,63 @@ describe('LogisticsService demo helpers', () => {
     process.env.DEMO_MODE = original;
   });
 
+  it('keeps demo helpers off in production unless enabled explicitly', async () => {
+    const nodeEnv = process.env.NODE_ENV;
+    delete process.env.DEMO_MODE;
+    process.env.NODE_ENV = 'production';
+    try {
+      const service = new LogisticsService({} as never);
+      await expect(service.simulateQuotes('u', 'req-1')).rejects.toThrow(
+        'DEMO_FEATURE_DISABLED',
+      );
+    } finally {
+      process.env.NODE_ENV = nodeEnv;
+    }
+  });
+
+  it('does not let the seller confirm delivery through simulated tracking', async () => {
+    process.env.DEMO_MODE = 'true';
+    const { prisma, tx } = shipmentPrisma('IN_TRANSIT', 'IN_TRANSIT');
+    prisma.shipment.findUnique = jest
+      .fn()
+      .mockResolvedValueOnce({
+        status: 'IN_TRANSIT',
+        logisticsRequest: { id: 'req-1' },
+      })
+      .mockResolvedValueOnce({
+        id: 'ship-1',
+        status: 'IN_TRANSIT',
+        trackingCode: 'LA123BR',
+        logisticsRequest: {
+          id: 'req-1',
+          requestedByUserId: 'seller-user',
+          destination: 'Santos/SP',
+          deal: { id: 'deal-1', status: 'IN_TRANSIT' },
+        },
+      })
+      .mockResolvedValue({ id: 'ship-1' });
+    Object.assign(prisma, {
+      logisticsRequest: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'req-1',
+          deal: { buyerCompanyId: 'buyer-co', sellerCompanyId: 'seller-co' },
+        }),
+      },
+      companyMember: {
+        findFirst: jest.fn().mockResolvedValue({ companyId: 'seller-co' }),
+        findMany: jest.fn().mockResolvedValue([{ companyId: 'seller-co' }]),
+      },
+    });
+    const service = new LogisticsService(prisma as never);
+    await service.simulateNextEvent('seller-user', 'ship-1');
+    expect(tx.shipment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'DELIVERED' }),
+      }),
+    );
+    expect(tx.deal.updateMany).not.toHaveBeenCalled();
+  });
+
   it('refuses simulated quotes when demo mode is off', async () => {
     process.env.DEMO_MODE = 'false';
     const service = new LogisticsService({} as never);

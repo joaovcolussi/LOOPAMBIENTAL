@@ -40,6 +40,50 @@ describe('ConversationsService', () => {
     expect(prisma.conversationParticipant.upsert).toHaveBeenCalled();
   });
 
+  it('only delivers new messages to current members of either side', async () => {
+    const message = { id: 'message-id', body: 'Olá', senderUserId: 'buyer' };
+    const prisma = {
+      conversation: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'conversation-id',
+          listing: { companyId: 'seller-company' },
+          proposal: { proposerCompanyId: 'buyer-company' },
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      message: { create: jest.fn().mockResolvedValue(message) },
+      conversationParticipant: {
+        findMany: jest.fn().mockResolvedValue([{ userId: 'seller' }]),
+      },
+    };
+    const notifications = { create: jest.fn().mockResolvedValue({}) };
+    const realtime = { publish: jest.fn() };
+    const service = new ConversationsService(
+      prisma as never,
+      notifications as never,
+      realtime as never,
+    );
+
+    await service.send('buyer', 'conversation-id', 'Olá');
+
+    expect(prisma.conversationParticipant.findMany).toHaveBeenCalledWith({
+      where: {
+        conversationId: 'conversation-id',
+        userId: { not: 'buyer' },
+        user: {
+          memberships: {
+            some: { companyId: { in: ['seller-company', 'buyer-company'] } },
+          },
+        },
+      },
+      select: { userId: true },
+    });
+    expect(realtime.publish.mock.calls.map(([userId]) => userId)).toEqual([
+      'buyer',
+      'seller',
+    ]);
+  });
+
   it('adds the unread message count for the current participant', async () => {
     const lastReadAt = new Date('2026-01-01T00:00:00.000Z');
     const conversation = {

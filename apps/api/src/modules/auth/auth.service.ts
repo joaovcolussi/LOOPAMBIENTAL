@@ -367,6 +367,25 @@ export class AuthService {
     return session.user;
   }
 
+  /**
+   * Read-only session check for long-lived connections: unlike
+   * getUserByToken it does not extend the idle timeout.
+   */
+  async isSessionActive(token: string, userId: string) {
+    const now = new Date();
+    const session = await this.prisma.session.findFirst({
+      where: {
+        tokenHash: this.hashToken(token),
+        userId,
+        expiresAt: { gt: now },
+        absoluteExpiresAt: { gt: now },
+        user: { status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+    return session !== null;
+  }
+
   async revokeSession(token: string) {
     await this.prisma.session.deleteMany({
       where: { tokenHash: this.hashToken(token) },

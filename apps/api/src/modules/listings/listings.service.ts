@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { Prisma } from '@loopambiental/database';
+import { Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { ListingMediaStorageService } from '../../infrastructure/listing-media-storage.service';
 import {
@@ -21,6 +21,7 @@ import {
   normalizeAttributes,
   replaceListingAttributes,
 } from './listing-attributes';
+import { LISTING_EDITED_IN_NEGOTIATION } from './listing-reasons';
 
 export type ListingInput = {
   companyId: string;
@@ -637,8 +638,18 @@ export class ListingsService {
       );
     }
     const quantity = input.quantity
-      ? this.parsePositiveDecimal(input.quantity, 'INVALID_QUANTITY')
+      ? new Prisma.Decimal(
+          this.parsePositiveDecimal(input.quantity, 'INVALID_QUANTITY'),
+        )
       : undefined;
+    // Stock already sold or reserved by deals stays committed: a new total
+    // only shifts the available quantity by the difference.
+    const quantityDelta =
+      quantity && !quantity.equals(listing.quantity)
+        ? quantity.minus(listing.quantity)
+        : null;
+    if (quantityDelta && quantityDelta.plus(listing.availableQuantity).lt(0))
+      throw new BadRequestException('QUANTITY_BELOW_COMMITTED');
     const targetCategoryId = input.categoryId ?? listing.categoryId;
     const categoryChanged = targetCategoryId !== listing.categoryId;
     const attributes = input.attributes
@@ -660,7 +671,11 @@ export class ListingsService {
       throw new BadRequestException('LISTING_UNDER_NEGOTIATION');
     return this.prisma.$transaction(async (transaction) => {
       const changed = await transaction.listing.updateMany({
-        where: { id, status: listing.status },
+        where: {
+          id,
+          status: listing.status,
+          ...(quantityDelta ? { quantity: listing.quantity } : {}),
+        },
         data: {
           ...(input.categoryId ? { categoryId: input.categoryId } : {}),
           ...(input.materialId !== undefined
@@ -676,7 +691,9 @@ export class ListingsService {
           ...(input.description !== undefined
             ? { description: input.description }
             : {}),
-          ...(quantity ? { quantity, availableQuantity: quantity } : {}),
+          ...(quantityDelta
+            ? { quantity, availableQuantity: { increment: quantityDelta } }
+            : {}),
           ...(input.unit ? { unit: input.unit } : {}),
           ...(input.unitPrice !== undefined
             ? {
@@ -718,6 +735,16 @@ export class ListingsService {
       });
       if (changed.count !== 1)
         throw new ConflictException('LISTING_STATE_CHANGED');
+      if (listing.status === 'NEGOTIATING')
+        await transaction.listingStatusHistory.create({
+          data: {
+            listingId: id,
+            fromStatus: 'NEGOTIATING',
+            toStatus: 'NEGOTIATING',
+            actorUserId: userId,
+            reason: LISTING_EDITED_IN_NEGOTIATION,
+          },
+        });
       if (attributes)
         await replaceListingAttributes(transaction, id, attributes);
       else if (categoryChanged)

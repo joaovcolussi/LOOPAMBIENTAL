@@ -13,6 +13,35 @@ import { PaymentsService } from '../payments/payments.service';
 const PERIOD_DAYS = 30;
 const PERIOD_MS = PERIOD_DAYS * 24 * 60 * 60 * 1000;
 
+/**
+ * A paid plan only entitles the company until the end of the period it paid
+ * for (renewing is a new checkout); free plans have no end.
+ */
+function inForce(now: Date): Prisma.SubscriptionWhereInput {
+  return {
+    OR: [
+      { currentPeriodEnd: null },
+      { currentPeriodEnd: { gt: now } },
+      { plan: { priceMonthly: { lte: 0 } } },
+    ],
+  };
+}
+
+/**
+ * Start of the window in which PLAN unlocks count against the quota. Paid
+ * plans count from the start of the paid period; free plans use a rolling
+ * window, so re-activating them never resets the quota.
+ */
+export function quotaWindowStart(subscription: {
+  currentPeriodStart: Date | null;
+  createdAt: Date;
+  plan: { priceMonthly?: Prisma.Decimal | string | null };
+}): Date {
+  if (new Prisma.Decimal(subscription.plan.priceMonthly ?? 0).gt(0))
+    return subscription.currentPeriodStart ?? subscription.createdAt;
+  return new Date(Date.now() - PERIOD_MS);
+}
+
 const planSelect = {
   id: true,
   code: true,
@@ -84,6 +113,9 @@ export class SubscriptionsService {
     if (!plan) throw new NotFoundException('PLAN_NOT_FOUND');
     if (this.payments && new Prisma.Decimal(plan.priceMonthly ?? 0).gt(0))
       return this.startPaidActivation(userId, companyId, plan);
+    const current = await this.findCurrent(companyId);
+    if (current?.status === 'ACTIVE' && current.plan.id === plan.id)
+      throw new BadRequestException('PLAN_ALREADY_ACTIVE');
 
     const now = new Date();
     const periodEnd = new Date(now.getTime() + PERIOD_MS);
@@ -166,15 +198,15 @@ export class SubscriptionsService {
   findActive(companyId: string): Promise<{
     currentPeriodStart: Date | null;
     createdAt: Date;
-    plan: { features: unknown };
+    plan: { features: unknown; priceMonthly: Prisma.Decimal };
   } | null> {
     return this.prisma.subscription.findFirst({
-      where: { companyId, status: 'ACTIVE' },
+      where: { companyId, status: 'ACTIVE', ...inForce(new Date()) },
       orderBy: { createdAt: 'desc' },
       select: {
         currentPeriodStart: true,
         createdAt: true,
-        plan: { select: { features: true } },
+        plan: { select: { features: true, priceMonthly: true } },
       },
     });
   }
@@ -253,6 +285,7 @@ export class SubscriptionsService {
       where: {
         companyId,
         status: { in: ['ACTIVE', 'PAST_DUE'] },
+        ...inForce(new Date()),
       },
       orderBy: { createdAt: 'desc' },
       select: subscriptionSelect,
@@ -264,7 +297,7 @@ export class SubscriptionsService {
     subscription: {
       currentPeriodStart: Date | null;
       createdAt: Date;
-      plan: { features: unknown };
+      plan: { features: unknown; priceMonthly?: Prisma.Decimal | string };
     } | null,
   ) {
     const limit = this.contactUnlockLimit(subscription?.plan.features);
@@ -274,13 +307,13 @@ export class SubscriptionsService {
     if (limit === -1) {
       const used = await this.countPlanUnlocks(
         companyId,
-        subscription.currentPeriodStart ?? subscription.createdAt,
+        quotaWindowStart(subscription),
       );
       return { contactUnlocks: { used, limit: null, remaining: null } };
     }
     const used = await this.countPlanUnlocks(
       companyId,
-      subscription.currentPeriodStart ?? subscription.createdAt,
+      quotaWindowStart(subscription),
     );
     return {
       contactUnlocks: { used, limit, remaining: Math.max(0, limit - used) },

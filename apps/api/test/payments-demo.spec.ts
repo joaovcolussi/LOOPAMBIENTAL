@@ -180,6 +180,40 @@ describe('PaymentsService.settle', () => {
     expect(notifications.create).not.toHaveBeenCalled();
   });
 
+  it('never settles a charge the platform cancelled and flags it for refund', async () => {
+    const { service, tx, outbox, notifications } = setup({
+      purpose: 'DEAL',
+      dealId: 'deal-1',
+      deal: { status: 'CANCELLED' },
+    });
+    tx.paymentTransaction.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+    await expect(
+      service.settle('pay-1', 'PAID', { mercadoPagoStatus: 'approved' }),
+    ).resolves.toBe(false);
+    expect(tx.paymentTransaction.updateMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: 'pay-1',
+        status: { in: ['INITIATED', 'PENDING', 'FAILED'] },
+      },
+      data: expect.objectContaining({ status: 'PAID' }),
+    });
+    expect(tx.paymentTransaction.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: 'pay-1', status: 'CANCELLED' },
+      data: {
+        metadata: expect.objectContaining({ refundRequired: 'true' }),
+      },
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'PAYMENT_APPROVED_AFTER_CANCELLATION',
+      }),
+    });
+    expect(outbox.enqueueWithin).not.toHaveBeenCalled();
+    expect(notifications.create).not.toHaveBeenCalled();
+  });
+
   it('records a refused payment without granting the benefit', async () => {
     const { service, tx } = setup({
       purpose: 'SUBSCRIPTION',

@@ -9,6 +9,7 @@ import type { DealStatus, Prisma } from '@loopambiental/database';
 import { PrismaService } from '../../infrastructure/prisma.service';
 import { OutboxService } from '../../infrastructure/outbox.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { LISTING_EDITED_IN_NEGOTIATION } from '../listings/listing-reasons';
 
 export type DealSide = 'BUYER' | 'SELLER';
 
@@ -309,7 +310,11 @@ export class DealsService {
       });
       if (definition.to === 'CANCELLED') {
         await tx.paymentTransaction.updateMany({
-          where: { dealId: id, status: { in: ['INITIATED', 'PENDING'] } },
+          // FAILED checkouts can still be retried at the provider.
+          where: {
+            dealId: id,
+            status: { in: ['INITIATED', 'PENDING', 'FAILED'] },
+          },
           data: { status: 'CANCELLED' },
         });
         await this.releaseListing(tx, deal, userId, true);
@@ -376,14 +381,25 @@ export class DealsService {
           note: note.slice(0, 200),
         },
       });
-      await this.releaseListing(tx, deal, actorUserId, to === 'CANCELLED');
+      // Disputes only exist after payment and the goods may already have
+      // shipped: cancelling never puts the stock back on sale, and the
+      // captured charge is flagged for a refund instead of staying PAID.
+      await this.releaseListing(tx, deal, actorUserId, false);
+      const refundPaymentIds =
+        to === 'CANCELLED' ? await this.flagChargesForRefund(tx, id) : [];
       await tx.auditLog.create({
         data: {
           actorUserId,
           action: 'DEAL_DISPUTE_RESOLVED',
           resourceType: 'DEAL',
           resourceId: id,
-          metadata: { resolution: to, notes: notes?.trim().slice(0, 300) },
+          metadata: {
+            resolution: to,
+            notes: notes?.trim().slice(0, 300),
+            ...(refundPaymentIds.length > 0
+              ? { refundRequiredPaymentIds: refundPaymentIds }
+              : {}),
+          },
         },
       });
     });
@@ -420,6 +436,35 @@ export class DealsService {
     });
   }
 
+  /** Marks the deal's captured charges as owing a refund; returns their ids. */
+  private async flagChargesForRefund(
+    tx: Prisma.TransactionClient,
+    dealId: string,
+  ) {
+    const paid = await tx.paymentTransaction.findMany({
+      where: { dealId, status: 'PAID' },
+      select: { id: true, metadata: true },
+    });
+    for (const payment of paid) {
+      const current =
+        payment.metadata &&
+        typeof payment.metadata === 'object' &&
+        !Array.isArray(payment.metadata)
+          ? payment.metadata
+          : {};
+      await tx.paymentTransaction.update({
+        where: { id: payment.id },
+        data: {
+          metadata: {
+            ...current,
+            refundRequired: 'true',
+          } as Prisma.InputJsonObject,
+        },
+      });
+    }
+    return paid.map((payment) => payment.id);
+  }
+
   /**
    * Returns reserved stock to the listing on cancellation and reopens it (or
    * closes it when sold out) once no other active deal holds it.
@@ -453,18 +498,46 @@ export class DealsService {
     });
     if (!listing || listing.status !== 'NEGOTIATING') return;
     const soldOut = Number(listing.availableQuantity) <= 0;
-    const toStatus = soldOut ? 'CLOSED' : 'PUBLISHED';
+    // Content edited during the negotiation was never reviewed, so it goes
+    // back to moderation instead of straight to public search.
+    const lastReview = soldOut
+      ? null
+      : await tx.listingStatusHistory.findFirst({
+          where: {
+            listingId: deal.listingId,
+            reason: {
+              in: ['MODERATION_APPROVED', LISTING_EDITED_IN_NEGOTIATION],
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { reason: true },
+        });
+    const needsReview = lastReview?.reason === LISTING_EDITED_IN_NEGOTIATION;
+    const toStatus = soldOut
+      ? 'CLOSED'
+      : needsReview
+        ? 'PENDING_REVIEW'
+        : 'PUBLISHED';
     await tx.listing.update({
       where: { id: deal.listingId },
-      data: { status: toStatus },
+      data: {
+        status: toStatus,
+        ...(needsReview ? { publishedAt: null } : {}),
+      },
     });
+    if (needsReview)
+      await tx.moderationCase.create({ data: { listingId: deal.listingId } });
     await tx.listingStatusHistory.create({
       data: {
         listingId: deal.listingId,
         fromStatus: 'NEGOTIATING',
         toStatus,
         actorUserId,
-        reason: soldOut ? 'DEAL_COMPLETED_SOLD_OUT' : 'DEAL_RELEASED',
+        reason: soldOut
+          ? 'DEAL_COMPLETED_SOLD_OUT'
+          : needsReview
+            ? 'LISTING_EDITED'
+            : 'DEAL_RELEASED',
       },
     });
   }

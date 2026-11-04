@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
+import { staffMfaSatisfied } from './admin.guard';
 import { AuthenticatedRequest } from './auth.guard';
 
 @Injectable()
@@ -23,6 +24,8 @@ export class ModerationGuard implements CanActivate {
       !isConfiguredAdmin
     )
       throw new ForbiddenException('MODERATION_ACCESS_REQUIRED');
+    if (!staffMfaSatisfied(request.user))
+      throw new ForbiddenException('ADMIN_MFA_REQUIRED');
     return true;
   }
 }
